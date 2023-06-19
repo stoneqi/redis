@@ -120,6 +120,7 @@ unsigned long long estimateObjectIdleTime(robj *o) {
  * evicted in the whole database. */
 
 /* Create a new eviction pool. */
+// 储存采样的key，删除过期key时，和采样的key进行对比
 void evictionPoolAlloc(void) {
     struct evictionPoolEntry *ep;
     int j;

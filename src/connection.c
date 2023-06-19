@@ -34,6 +34,7 @@ int connTypeRegister(ConnectionType *ct) {
     ConnectionType *tmpct;
     int type;
 
+    // 找到一个空的 solt
     /* find an empty slot to store the new connection type */
     for (type = 0; type < CONN_TYPE_MAX; type++) {
         tmpct = connTypes[type];

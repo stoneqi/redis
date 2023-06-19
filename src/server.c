@@ -2558,9 +2558,13 @@ void makeThreadKillable(void) {
 void initServer(void) {
     int j;
 
+
     signal(SIGHUP, SIG_IGN);
     signal(SIGPIPE, SIG_IGN);
+    // 设置信号handlers
     setupSignalHandlers();
+
+    // 是线程能被取消
     makeThreadKillable();
 
     if (server.syslog_enabled) {
@@ -2607,6 +2611,8 @@ void initServer(void) {
     server.reply_buffer_peak_reset_time = REPLY_BUFFER_DEFAULT_PEAK_RESET_TIME;
     server.reply_buffer_resizing_enabled = 1;
     server.client_mem_usage_buckets = NULL;
+
+    // 设置 主从复制 buffer
     resetReplicationBuffer();
 
     /* Make sure the locale is set on startup based on the config file. */
@@ -2615,10 +2621,15 @@ void initServer(void) {
         exit(1);
     }
 
+    // 创建一些共享的对象， 为什么不用产量
     createSharedObjects();
+
+    // 调整打开文件数量限制
     adjustOpenFilesLimit();
+    // monotonic 监控信息初始化
     const char *clk_msg = monotonicInit();
     serverLog(LL_NOTICE, "monotonic clock: %s", clk_msg);
+    // 创建时间loop
     server.el = aeCreateEventLoop(server.maxclients+CONFIG_FDSET_INCR);
     if (server.el == NULL) {
         serverLog(LL_WARNING,
@@ -2627,7 +2638,7 @@ void initServer(void) {
         exit(1);
     }
     server.db = zmalloc(sizeof(redisDb)*server.dbnum);
-
+    // 创建Rdeis 数据库
     /* Create the Redis databases, and initialize other internal state. */
     for (j = 0; j < server.dbnum; j++) {
         server.db[j].dict = dictCreate(&dbDictType);
@@ -2643,6 +2654,7 @@ void initServer(void) {
         server.db[j].slots_to_keys = NULL; /* Set by clusterInit later on if necessary. */
         listSetFreeMethod(server.db[j].defrag_later,(void (*)(void*))sdsfree);
     }
+    // 初始化，LRU采样key
     evictionPoolAlloc(); /* Initialize the LRU keys pool. */
     server.pubsub_channels = dictCreate(&keylistDictType);
     server.pubsub_patterns = dictCreate(&keylistDictType);
@@ -2736,7 +2748,9 @@ void initServer(void) {
         server.maxmemory_policy = MAXMEMORY_NO_EVICTION;
     }
 
+    // 初始化lua环境
     scriptingInit(1);
+    // lua注入函数
     functionsInit();
     slowlogInit();
     latencyMonitorInit();
@@ -6327,10 +6341,15 @@ static int THPDisable(void) {
 
 void linuxMemoryWarnings(void) {
     sds err_msg = NULL;
+
+     // 0， 表示内核将检查是否有足够的可用内存供应用进程使用；如果有足够的可用内存，内存申请允许；否则，内存申请失败，并把错误返回给应用进程。
+    // 1， 表示内核允许分配所有的物理内存，而不管当前的内存状态如何。
+    // 2， 表示内核允许分配超过所有物理内存和交换空间总和的内存
     if (checkOvercommit(&err_msg) < 0) {
         serverLog(LL_WARNING,"WARNING %s", err_msg);
         sdsfree(err_msg);
     }
+    // 检测巨页是否开启，开启可能导致写时复制产生大量的内存复制
     if (checkTHPEnabled(&err_msg) < 0) {
         server.thp_enabled = 1;
         if (THPDisable() == 0) {
@@ -7031,9 +7050,11 @@ redisTestProc *getTestProcByName(const char *name) {
 }
 #endif
 
+// main主函数
 int main(int argc, char **argv) {
     struct timeval tv;
     int j;
+    //char 类型的变量 config_from_stdin 用于标记程序是否需要从标准输入读取配置。该变量的初值为 0，表示程序不需要从标准输入读取配置。当该变量的值为 1 时，表示程序需要从标准输入读取配置。
     char config_from_stdin = 0;
 
 #ifdef REDIS_TEST
@@ -7078,12 +7099,27 @@ int main(int argc, char **argv) {
 #endif
 
     /* We need to initialize our libraries, and the server configuration. */
+// 预编译指令-进程标题
+// 在这里，#ifdef INIT_SETPROCTITLE_REPLACEMENT 到 #endif 之间的代码段将会被编译，如果在编译 Redis 时定义了 INIT_SETPROCTITLE_REPLACEMENT 宏。该宏在 Redis 的 Makefile 中定义，用于告知编译器使用一个自定义的进程标题设置函数 spt_init()。
+// 进程标题是指进程在操作系统中显示的名称，通常用于标识进程的用途。在 Redis 中，进程标题默认为 Redis 的运行参数（如端口号、工作目录等）的组合，但是在某些情况下（如在服务端部署时），我们可能希望进程标题能够更直观地反映 Redis 的用途，这时可以使用自定义的进程标题设置函数来实现。
+// INIT_SETPROCTITLE_REPLACEMENT 宏的定义与具体实现有关，可以参考 Redis 的源代码和 Makefile 文件来了解。在这里，我们假设该宏定义了一个值为 1 的整数常量，表示需要启用进程标题的自定义设置。如果该宏被定义，那么就会调用 spt_init() 函数来初始化进程标题，该函数的参数为 argc 和 argv，表示命令行参数的数量和内容。
 #ifdef INIT_SETPROCTITLE_REPLACEMENT
     spt_init(argc, argv);
 #endif
+    // tzset完成的工作是把当前时区信息（通过TZ环境变量或者/etc/localtime）读入并缓冲。事实上tzset在实现的时候是通过内部的tzset_internal函数来完成的，显式的调用tzset会以显式的方式告知tzset_internal，而单独调用localtime的时候是以隐式的方式告知tzset_internal，前者将强制tzset不管何种情况一律重新加载TZ信息或者/etc/localtime，而后者则是只有在TZ发生变化，或者加载文件名发生变化的时候才会再次加载时区信息。
     tzset(); /* Populates 'timezone' global. */
+    // 设置 OOM handler， 发生OOM ，打印错误和当前信息。
     zmalloc_set_oom_handler(redisOutOfMemoryHandler);
 
+// 这段代码主要用于初始化随机数发生器。具体来说，它执行以下操作：
+
+// 调用 gettimeofday 函数获取当前时间，并存储到 tv 结构体中。
+// 使用当前进程的进程 ID、时间戳、以及微秒数作为种子，通过 srand 和 srandom 函数初始化随机数发生器。
+// 调用 init_genrand64 函数，使用当前时间的秒数和微秒数、以及进程 ID 作为种子，初始化一个 64 位随机数发生器。
+// 调用 crc64_init 函数初始化 CRC64 校验表。
+// 这些操作的目的是为了在 Redis 运行期间产生各种随机数，以及在需要进行校验和计算时使用 CRC64 校验表。这样可以增加 Redis 的安全性和可靠性，确保 Redis 在各种情况下都能正常运行。
+
+    // 在容器场景下， time 和 getpid 可能一致，因此使用 tv 去获取独一无二的值
     /* To achieve entropy, in case of containers, their time() and getpid() can
      * be the same. But value of tv_usec is fast enough to make the difference */
     gettimeofday(&tv,NULL);
@@ -7096,21 +7132,41 @@ int main(int argc, char **argv) {
      * to reset it and restore it back. We do this early to avoid a potential
      * race condition with threads that could be creating files or directories.
      */
+    // 设置文件权限，在 Redis 中，通过将文件创建屏蔽字设置为 0777，可以确保 Redis 在创建文件时不会受到任何限制，这对于一些需要频繁创建和操作文件的场景非常重要，比如 AOF 持久化和 RDB 持久化等。
     umask(server.umask = umask(0777));
 
+    // 生成一个随机的hash 种子
     uint8_t hashseed[16];
     getRandomBytes(hashseed,sizeof(hashseed));
     dictSetHashFunctionSeed(hashseed);
 
+
+
+    // 通过 strrchr() 函数获取程序名 argv[0] 中最后一个 / 字符之后的字符串（即程序名），并将其保存到 exec_name 变量中。
     char *exec_name = strrchr(argv[0], '/');
+    // 如果程序名中没有 / 字符，说明 argv[0] 本身就是程序名，将其直接保存到 exec_name 变量中。
     if (exec_name == NULL) exec_name = argv[0];
+    // 调用 checkForSentinelMode() 函数检查是否以 Sentinel(哨兵) 模式运行，并将检查结果保存到 server.sentinel_mode 变量中
     server.sentinel_mode = checkForSentinelMode(argc,argv, exec_name);
+
+    // initServerConfig()是Redis中用来初始化服务器配置结构体的函数。在该函数中，会将服务器配置结构体的各个成员变量设置为默认值，然后根据启动参数以及配置文件的设置修改这些默认值。
+    // 具体来说，该函数会先将所有的配置项都设置为默认值，然后读取redis.conf配置文件中的配置项，如果启动参数中存在与配置文件中相同的配置项，则以启动参数中的值为准。最后，根据sentinel_mode变量的值来决定是否进行哨兵模式下的配置。
     initServerConfig();
+
+    // ACLInit()函数是Redis中用来初始化ACL权限控制模块的函数。在该函数中，会初始化一些数据结构，以支持后续的ACL操作。
+    // 具体来说，该函数会初始化一个全局的ACL权限列表，以及多个用于ACL操作的数据结构，如命令表（command table）、用户表（user table）、角色表（role table）等。在初始化过程中，该函数会从配置文件中读取默认的ACL规则，并将其加入到全局的ACL权限列表中。同时，该函数还会将defaultUser用户和defaultPassword密码设置为默认的登录凭据，以便在没有指定具体凭据的情况下，使用这些凭据进行登录。
     ACLInit(); /* The ACL subsystem must be initialized ASAP because the
                   basic networking code and client creation depends on it. */
+
+
+    // 它的作用是初始化 Redis 的模块系统。
+    // Redis 模块系统允许开发者通过动态加载模块，扩展 Redis 的功能。模块系统允许开发者通过 Redis 提供的 API 进行模块开发，同时模块也可以在 Redis 运行时加载、卸载，而无需停止 Redis 服务。
     moduleInitModulesSystem();
+
+    // 定义了通用接口 ConnectionType ，然后实现了三种链接类型tcp，unix，tls， 并存储在 connTypes 中
     connTypeInitialize();
 
+    // 保存程序路径以及参数，方便后续能重启服务
     /* Store the executable path and arguments in a safe place in order
      * to be able to restart the server later. */
     server.executable = getAbsolutePath(argv[0]);
@@ -7118,6 +7174,7 @@ int main(int argc, char **argv) {
     server.exec_argv[argc] = NULL;
     for (j = 0; j < argc; j++) server.exec_argv[j] = zstrdup(argv[j]);
 
+    // 哨兵模式下做相应的初始化
     /* We need to init sentinel right now as parsing the configuration file
      * in sentinel mode will have the effect of populating the sentinel
      * data structures with master nodes to monitor. */
@@ -7129,6 +7186,7 @@ int main(int argc, char **argv) {
     /* Check if we need to start in redis-check-rdb/aof mode. We just execute
      * the program main. However the program is part of the Redis executable
      * so that we can easily execute an RDB check on loading errors. */
+    // 如果处于检测模式下，则执行备份文件检测。 redis 一个程序会包含多种功能，通过不同文件名软链到同一个文件实现。
     if (strstr(exec_name,"redis-check-rdb") != NULL)
         redis_check_rdb_main(argc,argv,NULL);
     else if (strstr(exec_name,"redis-check-aof") != NULL)
@@ -7155,10 +7213,13 @@ int main(int argc, char **argv) {
         } if (strcmp(argv[1], "--check-system") == 0) {
             exit(syscheck() ? 0 : 1);
         }
+
+
         /* Parse command line options
          * Precedence wise, File, stdin, explicit options -- last config is the one that matters.
          *
          * First argument is the config file name? */
+        // 这段代码主要是处理Redis服务器的命令行参数。如果第一个参数不是以“-”开头，那么这个参数应该是配置文件的路径。此时，服务器会将配置文件的绝对路径存储在server.configfile中，并替换server.exec_argv数组中的配置文件路径参数为绝对路径。最后，j被设置为2，这是为了在后续解析选项时跳过这个参数。
         if (argv[1][0] != '-') {
             /* Replace the config file in server.exec_argv with its absolute path. */
             server.configfile = getAbsolutePath(argv[1]);
@@ -7166,6 +7227,8 @@ int main(int argc, char **argv) {
             server.exec_argv[1] = zstrdup(server.configfile);
             j = 2; // Skip this arg when parsing options
         }
+
+        // 检测选项参数
         sds *argv_tmp;
         int argc_tmp;
         int handled_last_config_arg = 1;
@@ -7242,17 +7305,20 @@ int main(int argc, char **argv) {
             }
             j++;
         }
-
+        // 加载配置文件
         loadServerConfig(server.configfile, config_from_stdin, options);
         if (server.sentinel_mode) loadSentinelConfigFromQueue();
         sdsfree(options);
     }
+    // 哨兵模式
     if (server.sentinel_mode) sentinelCheckConfigFile();
 
     /* Do system checks */
 #ifdef __linux__
+    // 检测内存一些不合适的设置项
     linuxMemoryWarnings();
     sds err_msg = NULL;
+    // 在 xen 的时钟源下这个程序的的执行时间居然是时钟源为 tsc 的 4.83 倍！其原因在于 tsc 时钟源是从时间戳计数器 (TSC) 来读取时间的。这个 TSC 是 Intel x86 架构 CPU 上的计数器，大致与自处理器启动以来的时钟周期数相对应，并可以 rdtsc 或 rdtscp 指令来读取。至关重要的是，这些都操作是非特权指令，意味着从 tsc 时钟源获取时间而无需切换到内核模式。这就是使用 tsc 性能更好的原因。
     if (checkXenClocksource(&err_msg) < 0) {
         serverLog(LL_WARNING, "WARNING %s", err_msg);
         sdsfree(err_msg);
@@ -7295,6 +7361,7 @@ int main(int argc, char **argv) {
         serverLog(LL_NOTICE, "Configuration loaded");
     }
 
+    // 初始化服务
     initServer();
     if (background || server.pidfile) createPidFile();
     if (server.set_proc_title) redisSetProcTitle(NULL);
