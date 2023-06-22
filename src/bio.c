@@ -116,6 +116,7 @@ void *bioProcessBackgroundJobs(void *arg);
 #define REDIS_THREAD_STACK_SIZE (1024*1024*4)
 
 /* Initialize the background system, spawning the thread. */
+// 初始化部分线程，存放在 bio_jobs中
 void bioInit(void) {
     pthread_attr_t attr;
     pthread_t thread;
@@ -123,6 +124,7 @@ void bioInit(void) {
     unsigned long j;
 
     /* Initialization of state vars and objects */
+    //初始化任务池 为一个链表
     for (j = 0; j < BIO_WORKER_NUM; j++) {
         pthread_mutex_init(&bio_mutex[j],NULL);
         pthread_cond_init(&bio_newjob_cond[j],NULL);
@@ -139,6 +141,7 @@ void bioInit(void) {
     /* Ready to spawn our threads. We use the single argument the thread
      * function accepts in order to pass the job ID the thread is
      * responsible for. */
+    // 准备工作线程 bioProcessBackgroundJobs 持续处理 bio_jobs 中的任务。
     for (j = 0; j < BIO_WORKER_NUM; j++) {
         void *arg = (void*)(unsigned long) j;
         if (pthread_create(&thread,&attr,bioProcessBackgroundJobs,arg) != 0) {

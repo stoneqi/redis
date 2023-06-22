@@ -2842,7 +2842,9 @@ void initListeners(void) {
  * Thread Local Storage initialization collides with dlopen call.
  * see: https://sourceware.org/bugzilla/show_bug.cgi?id=19329 */
 void InitServerLast(void) {
+    // 初始化两个不同的线程池
     bioInit();
+    // IO线程池，处理IO事件
     initThreadedIO();
     set_jemalloc_bg_thread(server.jemalloc_bg_thread);
     server.initial_memory_usage = zmalloc_used_memory();
@@ -7376,14 +7378,18 @@ int main(int argc, char **argv) {
     }
     ACLLoadUsersAtStartup();
     initListeners();
+    // 集群模式
     if (server.cluster_enabled) {
         clusterInitListeners();
     }
+    // 初始化一些线程池
     InitServerLast();
 
+    // 不是哨兵模式
     if (!server.sentinel_mode) {
         /* Things not needed when running in Sentinel mode. */
         serverLog(LL_NOTICE,"Server initialized");
+        // 读取aof 和 RDB 恢复文件
         aofLoadManifestFromDisk();
         loadDataFromDisk();
         aofOpenIfNeededOnServerStart();
@@ -7392,6 +7398,7 @@ int main(int argc, char **argv) {
             serverAssert(verifyClusterConfigWithData() == C_OK);
         }
 
+        // 打印准备接受链接
         for (j = 0; j < CONN_TYPE_MAX; j++) {
             connListener *listener = &server.listeners[j];
             if (listener->ct == NULL)
@@ -7400,6 +7407,7 @@ int main(int argc, char **argv) {
             serverLog(LL_NOTICE,"Ready to accept connections %s", listener->ct->get_type(NULL));
         }
 
+        // 有保活逻辑
         if (server.supervised_mode == SUPERVISED_SYSTEMD) {
             if (!server.masterhost) {
                 redisCommunicateSystemd("STATUS=Ready to accept connections\n");
@@ -7420,10 +7428,11 @@ int main(int argc, char **argv) {
     if (server.maxmemory > 0 && server.maxmemory < 1024*1024) {
         serverLog(LL_WARNING,"WARNING: You specified a maxmemory value that is less than 1MB (current value is %llu bytes). Are you sure this is what you really want?", server.maxmemory);
     }
-
+    // 设置CPU亲和
     redisSetCpuAffinity(server.server_cpulist);
+    // 设置OOM时杀进程的优先级
     setOOMScoreAdj(-1);
-
+    // 开始主循环
     aeMain(server.el);
     aeDeleteEventLoop(server.el);
     return 0;

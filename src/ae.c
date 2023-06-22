@@ -375,6 +375,7 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags)
         struct timeval tv, *tvp = NULL; /* NULL means infinite wait. */
         int64_t usUntilTimer;
 
+        // 睡眠前执行
         if (eventLoop->beforesleep != NULL && (flags & AE_CALL_BEFORE_SLEEP))
             eventLoop->beforesleep(eventLoop);
 
@@ -396,6 +397,7 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags)
         }
         /* Call the multiplexing API, will return only on timeout or when
          * some event fires. */
+        // 阻塞直到发生事件，事件写入到 fired 中
         numevents = aeApiPoll(eventLoop, tvp);
 
         /* Don't process file events if not requested. */

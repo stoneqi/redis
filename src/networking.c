@@ -4178,7 +4178,10 @@ void *IOThreadMain(void *myid) {
 
     snprintf(thdname, sizeof(thdname), "io_thd_%ld", id);
     redis_set_thread_title(thdname);
+    // 设置CPU亲和
     redisSetCpuAffinity(server.server_cpulist);
+
+    // 使线程可被结束
     makeThreadKillable();
 
     while(1) {
@@ -4203,6 +4206,7 @@ void *IOThreadMain(void *myid) {
         listRewind(io_threads_list[id],&li);
         while((ln = listNext(&li))) {
             client *c = listNodeValue(ln);
+            // 判断读写操作
             if (io_threads_op == IO_THREADS_OP_WRITE) {
                 writeToClient(c,0);
             } else if (io_threads_op == IO_THREADS_OP_READ) {
@@ -4234,8 +4238,10 @@ void initThreadedIO(void) {
     }
 
     /* Spawn and initialize the I/O threads. */
+    // 初始化足够的IO线程， 执行IOThreadMain
     for (int i = 0; i < server.io_threads_num; i++) {
         /* Things we do for all the threads including the main thread. */
+        // 线程任务
         io_threads_list[i] = listCreate();
         if (i == 0) continue; /* Thread 0 is the main thread. */
 
