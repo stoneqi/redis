@@ -70,28 +70,42 @@ typedef void aeBeforeSleepProc(struct aeEventLoop *eventLoop);
 
 /* File event structure */
 typedef struct aeFileEvent {
+    // 触发事件的标志
     int mask; /* one of AE_(READABLE|WRITABLE|BARRIER) */
+    // 读处理函数
     aeFileProc *rfileProc;
+    // 写处理函数
     aeFileProc *wfileProc;
+    // 连接的客户端数据
     void *clientData;
 } aeFileEvent;
 
 /* Time event structure */
 typedef struct aeTimeEvent {
+    // 自增事件ID
     long long id; /* time event identifier. */
+    // 设置触发事件
     monotime when;
+    // 处理函数
     aeTimeProc *timeProc;
+    // 该事件主动删除时候的触发函数，通过 timeProc 函数返回-1时，删除该事件，执行finalizerProc
     aeEventFinalizerProc *finalizerProc;
+    // 客户端数据, 一般为空
     void *clientData;
+
+    // 双链表
     struct aeTimeEvent *prev;
     struct aeTimeEvent *next;
+    // 调用 timeProc 时候该饮用+1，执行完成-1
     int refcount; /* refcount to prevent timer events from being
   		   * freed in recursive time event calls. */
-} aeTimeEvent;
+}aeTimeEvent;
 
 /* A fired event */
 typedef struct aeFiredEvent {
+    // 文件描述符id
     int fd;
+    // 触发事件
     int mask;
 } aeFiredEvent;
 
@@ -101,6 +115,7 @@ typedef struct aeEventLoop {
     int setsize; /* max number of file descriptors tracked */
     long long timeEventNextId;
     aeFileEvent *events; /* Registered events */
+    // 存放有读写事件的描述符
     aeFiredEvent *fired; /* Fired events */
     aeTimeEvent *timeEventHead;
     int stop;

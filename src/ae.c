@@ -261,6 +261,7 @@ int aeDeleteTimeEvent(aeEventLoop *eventLoop, long long id)
  *    Much better but still insertion or deletion of timers is O(N).
  * 2) Use a skiplist to have this operation as O(1) and insertion as O(log(N)).
  */
+// 遍历  timeEventHead 找出最早的 timer
 static int64_t usUntilEarliestTimer(aeEventLoop *eventLoop) {
     aeTimeEvent *te = eventLoop->timeEventHead;
     if (te == NULL) return -1;
@@ -282,6 +283,7 @@ static int processTimeEvents(aeEventLoop *eventLoop) {
     aeTimeEvent *te;
     long long maxId;
 
+    // 获取代处理事件
     te = eventLoop->timeEventHead;
     maxId = eventLoop->timeEventNextId-1;
     monotime now = getMonotonicUs();
@@ -318,20 +320,23 @@ static int processTimeEvents(aeEventLoop *eventLoop) {
          * add new timers on the head, however if we change the implementation
          * detail, this check may be useful again: we keep it here for future
          * defense. */
+        // 不处理在这次循环中新建的事件。
         if (te->id > maxId) {
             te = te->next;
             continue;
         }
-
+        // 当前时间大于触发事件，说明应该触发该事件
         if (te->when <= now) {
             int retval;
 
             id = te->id;
             te->refcount++;
+            // 执行 timeProc 函数
             retval = te->timeProc(eventLoop, id, te->clientData);
             te->refcount--;
             processed++;
             now = getMonotonicUs();
+            // 返回不为-1，则过 retval 秒继续触发
             if (retval != AE_NOMORE) {
                 te->when = now + (monotime)retval * 1000;
             } else {
@@ -375,7 +380,7 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags)
         struct timeval tv, *tvp = NULL; /* NULL means infinite wait. */
         int64_t usUntilTimer;
 
-        // 睡眠前执行
+        // 阻塞前的执行函数
         if (eventLoop->beforesleep != NULL && (flags & AE_CALL_BEFORE_SLEEP))
             eventLoop->beforesleep(eventLoop);
 
@@ -388,6 +393,7 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags)
             tv.tv_sec = tv.tv_usec = 0;
             tvp = &tv;
         } else if (flags & AE_TIME_EVENTS) {
+            // 获得需要最早的触发时间
             usUntilTimer = usUntilEarliestTimer(eventLoop);
             if (usUntilTimer >= 0) {
                 tv.tv_sec = usUntilTimer / 1000000;
@@ -397,7 +403,7 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags)
         }
         /* Call the multiplexing API, will return only on timeout or when
          * some event fires. */
-        // 阻塞直到发生事件，事件写入到 fired 中
+        // 阻塞直到发生事件或者到超时时间（超时时间为下一个事件的过期事件），有事件发生的描述符写入到 fired 中
         numevents = aeApiPoll(eventLoop, tvp);
 
         /* Don't process file events if not requested. */
@@ -406,6 +412,7 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags)
         }
 
         /* After sleep callback. */
+        // 阻塞后的执行函数
         if (eventLoop->aftersleep != NULL && flags & AE_CALL_AFTER_SLEEP)
             eventLoop->aftersleep(eventLoop);
 

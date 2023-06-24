@@ -120,9 +120,13 @@ static int aeApiPoll(aeEventLoop *eventLoop, struct timeval *tvp) {
             int mask = 0;
             struct epoll_event *e = state->events+j;
 
+            // 表示对应的文件描述符可以读
             if (e->events & EPOLLIN) mask |= AE_READABLE;
+            //  表示对应的文件描述符可以写
             if (e->events & EPOLLOUT) mask |= AE_WRITABLE;
+            // 表示对应的文件描述符发生错误
             if (e->events & EPOLLERR) mask |= AE_WRITABLE|AE_READABLE;
+            // 表示对应的文件描述符被挂断
             if (e->events & EPOLLHUP) mask |= AE_WRITABLE|AE_READABLE;
             eventLoop->fired[j].fd = e->data.fd;
             eventLoop->fired[j].mask = mask;

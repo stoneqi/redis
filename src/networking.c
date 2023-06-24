@@ -1299,7 +1299,7 @@ void clientAcceptHandler(connection *conn) {
 void acceptCommonHandler(connection *conn, int flags, char *ip) {
     client *c;
     UNUSED(ip);
-
+    // 检测链接状态
     if (connGetState(conn) != CONN_STATE_ACCEPTING) {
         char addr[NET_ADDR_STR_LEN] = {0};
         char laddr[NET_ADDR_STR_LEN] = {0};
@@ -1317,6 +1317,7 @@ void acceptCommonHandler(connection *conn, int flags, char *ip) {
      * Admission control will happen before a client is created and connAccept()
      * called, because we don't want to even start transport-level negotiation
      * if rejected. */
+    // 检测链接是否超过最大客户端限制限制
     if (listLength(server.clients) + getClusterConnectionsCount()
         >= server.maxclients)
     {
@@ -1339,6 +1340,7 @@ void acceptCommonHandler(connection *conn, int flags, char *ip) {
     }
 
     /* Create connection and client */
+    // 创建一个 client
     if ((c = createClient(conn)) == NULL) {
         char addr[NET_ADDR_STR_LEN] = {0};
         char laddr[NET_ADDR_STR_LEN] = {0};
@@ -2620,6 +2622,7 @@ void readQueryFromClient(connection *conn) {
 
     /* Check if we want to read from the client later when exiting from
      * the event loop. This is the case if threaded I/O is enabled. */
+    // 如果开启多线程，则将该请求加入到多线程任务处理池
     if (postponeClientRead(c)) return;
 
     /* Update total number of reads on server */
@@ -2710,6 +2713,7 @@ void readQueryFromClient(connection *conn) {
 
     /* There is more data in the client input buffer, continue parsing it
      * and check if there is a full command to execute. */
+    // 执行实际的命令
     if (processInputBuffer(c) == C_ERR)
          c = NULL;
 
@@ -4426,6 +4430,7 @@ int postponeClientRead(client *c) {
         !(c->flags & (CLIENT_MASTER|CLIENT_SLAVE|CLIENT_BLOCKED)) &&
         io_threads_op == IO_THREADS_OP_IDLE)
     {
+        // 将当前连接加入 clients_pending_read， 供多线程读区。
         listAddNodeHead(server.clients_pending_read,c);
         c->pending_read_list_node = listFirst(server.clients_pending_read);
         return 1;
@@ -4456,6 +4461,7 @@ int handleClientsWithPendingReadsUsingThreads(void) {
     listNode *ln;
     listRewind(server.clients_pending_read,&li);
     int item_id = 0;
+    // 将 clients_pending_read等待读的事件添加到 io_threads_list 中
     while((ln = listNext(&li))) {
         client *c = listNodeValue(ln);
         int target_id = item_id % server.io_threads_num;

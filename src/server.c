@@ -1256,7 +1256,19 @@ void cronUpdateMemoryStats(void) {
  * so in order to throttle execution of things we want to do less frequently
  * a macro is used: run_with_period(milliseconds) { .... }
  */
+// 1，更新服务器的各类统计信息。比如时间，分为秒级和毫秒级，时间还分为从缓存中获取的和从系统调用获取的，比如unixtime,mstime）内存占用，比如stat_peak_memory,这个是用来触发内存淘汰机制。关于内存内存淘汰机制的细节请回看一讲的拓展部分)、数据库占用，就是指连接服务器的客户端数量，这个数量可以在redis.conf文件自定义设置。
 
+// 2，清理数据库中的过期键值对，这个可以具体分为惰性删除和定时删除;
+
+// 3，关闭和清理连接失效的客户端，为了不浪费内存资源;
+
+// 4，尝试进行AOF或RDB持久化操作，详细细节，下一节讲，敬请留意；
+
+// 5，同步数据，如果服务器是主服务器，还需要对从服务器进行定期同步
+
+// 6，心跳检测，如果处于集群模式，对集群进行定期同步和连接测试。
+
+// serverCron函数就类似一个定时体检，只不过我们半年一次体检，serverCron比较快一点。快多少？大概就是100毫秒检查一次，也就是1秒检查10次。
 int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
     int j;
     UNUSED(eventLoop);
@@ -1265,12 +1277,15 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
 
     /* Software watchdog: deliver the SIGALRM that will reach the signal
      * handler if we don't return here fast enough. */
+    // 如果开启watchdog_period ，则设置触发 SIGALRM 事件
     if (server.watchdog_period) watchdogScheduleSignal(server.watchdog_period);
 
     server.hz = server.config_hz;
     /* Adapt the server.hz value to the number of configured clients. If we have
      * many clients, we want to call serverCron() with an higher frequency. */
+    // hz 为每1秒执行次数，限定serverCron 执行频率，客户端越多，则执行频率更高
     if (server.dynamic_hz) {
+        // 如果 server.hz 太小，则扩大两倍
         while (listLength(server.clients) / server.hz >
                MAX_CLIENTS_PER_CLOCK_TICK)
         {
@@ -1287,7 +1302,9 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
 
     monotime cron_start = getMonotonicUs();
 
+    // 如果1s内执行100次 或者 执行次数小于，则执行下述代码
     run_with_period(100) {
+        // 更新对应的统计信息
         long long stat_net_input_bytes, stat_net_output_bytes;
         long long stat_net_repl_input_bytes, stat_net_repl_output_bytes;
         atomicGet(server.stat_net_input_bytes, stat_net_input_bytes);
@@ -1322,12 +1339,15 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
      *
      * Note that you can change the resolution altering the
      * LRU_CLOCK_RESOLUTION define. */
+    //TODO LRU锁实现机制
     server.lruclock = getLRUClock();
 
+    // 升级内存统计信息
     cronUpdateMemoryStats();
 
     /* We received a SIGTERM or SIGINT, shutting down here in a safe way, as it is
      * not ok doing so inside the signal handler. */
+    // 收到服务关闭的信号，则执行服务关闭。
     if (server.shutdown_asap && !isShutdownInitiated()) {
         int shutdownFlags = SHUTDOWN_NOFLAGS;
         if (server.last_sig_received == SIGINT && server.shutdown_on_sigint)
@@ -1344,6 +1364,7 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
     }
 
     /* Show some info about non-empty databases */
+    // 显示数据库的一些键值数量数据
     if (server.verbosity <= LL_VERBOSE) {
         run_with_period(5000) {
             for (j = 0; j < server.dbnum; j++) {
@@ -1360,6 +1381,7 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
     }
 
     /* Show information about connected clients */
+    // 显示连接的客户端，减去slaves
     if (!server.sentinel_mode) {
         run_with_period(5000) {
             serverLog(LL_DEBUG,
@@ -1371,13 +1393,16 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
     }
 
     /* We need to do a few operations on clients asynchronously. */
+    // 客户端检测
     clientsCron();
 
     /* Handle background operations on Redis databases. */
+    // 执行key 过期， 重hash，resize等操作
     databasesCron();
 
     /* Start a scheduled AOF rewrite if this was requested by the user while
      * a BGSAVE was in progress. */
+    // AOF 重写
     if (!hasActiveChildProcess() &&
         server.aof_rewrite_scheduled &&
         !aofRewriteLimited())
@@ -2411,6 +2436,8 @@ void closeListener(connListener *sfd) {
 
 /* Create an event handler for accepting new connections in TCP or TLS domain sockets.
  * This works atomically for all socket fds */
+
+// 注册可读事件，处理新链接的到来
 int createSocketAcceptHandler(connListener *sfd, aeFileProc *accept_handler) {
     int j;
 
@@ -3838,7 +3865,7 @@ uint64_t getCommandFlags(client *c) {
  * If C_OK is returned the client is still alive and valid and
  * other operations can be performed by the caller. Otherwise
  * if C_ERR is returned the client was destroyed (i.e. after QUIT). */
-int processCommand(client *c) {
+int –processCommand(client *c) {
     if (!scriptIsTimedout()) {
         /* Both EXEC and scripts call call() directly so there should be
          * no way in_exec or scriptIsRunning() is 1.
