@@ -203,12 +203,12 @@ extern int configOOMScoreAdjValuesDefaults[CONFIG_OOM_COUNT];
 
 /* Command flags. Please check the definition of struct redisCommand in this file
  * for more information about the meaning of every flag. */
-#define CMD_WRITE (1ULL<<0)
-#define CMD_READONLY (1ULL<<1)
-#define CMD_DENYOOM (1ULL<<2)
+#define CMD_WRITE (1ULL<<0) // 写
+#define CMD_READONLY (1ULL<<1)  // 仅读
+#define CMD_DENYOOM (1ULL<<2) // 拒绝OOM
 #define CMD_MODULE (1ULL<<3)           /* Command exported by module. */
-#define CMD_ADMIN (1ULL<<4)
-#define CMD_PUBSUB (1ULL<<5)
+#define CMD_ADMIN (1ULL<<4)  // admin
+#define CMD_PUBSUB (1ULL<<5)  // pub sub
 #define CMD_NOSCRIPT (1ULL<<6)
 #define CMD_BLOCKING (1ULL<<8)       /* Has potential to block. */
 #define CMD_LOADING (1ULL<<9)
@@ -1546,6 +1546,7 @@ struct redisServer {
     int hz;                     /* serverCron() calls frequency in hertz */
     int in_fork_child;          /* indication that this is a fork child */
     redisDb *db;
+    // 所有可执行命令及其对应参数
     dict *commands;             /* Command table */
     dict *orig_commands;        /* Command table before command renaming. */
     aeEventLoop *el;
@@ -1821,6 +1822,7 @@ struct redisServer {
     int child_info_pipe[2];         /* Pipe used to write the child_info_data. */
     int child_info_nread;           /* Num of bytes of the last read from pipe */
     /* Propagation of commands in AOF / replication */
+    // 添加命令头扩散
     redisOpArray also_propagate;    /* Additional command to propagate. */
     int replication_allowed;        /* Are we allowed to replicate? */
     /* Logging */
@@ -2310,32 +2312,52 @@ typedef int redisGetKeysProc(struct redisCommand *cmd, robj **argv, int argc, ge
  */
 struct redisCommand {
     /* Declarative data */
+    // 命令的名字
     const char *declared_name; /* A string representing the command declared_name.
                                 * It is a const char * for native commands and SDS for module commands. */
+    // 命令描述
     const char *summary; /* Summary of the command (optional). */
+    // 复杂度
     const char *complexity; /* Complexity description (optional). */
+    // 命令的版本
     const char *since; /* Debut version of the command (optional). */
+    // 
     int doc_flags; /* Flags for documentation (see CMD_DOC_*). */
+    // 命令被弃用，这里是替代的命令
     const char *replaced_by; /* In case the command is deprecated, this is the successor command. */
+    // 弃用的时候
     const char *deprecated_since; /* In case the command is deprecated, when did it happen? */
+    // 命令属于哪一个  redisCommandGroup
     redisCommandGroup group; /* Command group */
+    // 历史命令
     commandHistory *history; /* History of the command */
+    // 历史命令🌲
     int num_history;
+    // 命令的提示
     const char **tips; /* An array of strings that are meant to be tips for clients/proxies regarding this command */
+    // 命令提示数目
     int num_tips;
+    // 实际命令处理时限
     redisCommandProc *proc; /* Command implementation */
+    // 参数数量
     int arity; /* Number of arguments, it is possible to use -N to say >= N */
+    // flags
     uint64_t flags; /* Command flags, see CMD_*. */
+    // acl权限
     uint64_t acl_categories; /* ACl categories, see ACL_CATEGORY_*. */
     keySpec *key_specs;
     int key_specs_num;
     /* Use a function to determine keys arguments in a command line.
      * Used for Redis Cluster redirect (may be NULL) */
+    // 使用函数提前处理key
     redisGetKeysProc *getkeys_proc;
+    // 参数数目
     int num_args; /* Length of args array. */
     /* Array of subcommands (may be NULL) */
+    // 子命令
     struct redisCommand *subcommands;
     /* Array of arguments (may be NULL) */
+    // 命令参数
     struct redisCommandArg *args;
 #ifdef LOG_REQ_RES
     /* Reply schema */

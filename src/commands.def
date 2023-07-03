@@ -10635,8 +10635,10 @@ struct COMMAND_ARG WATCH_Args[] = {
 };
 
 /* Main command table */
+// redis 所有命令
 struct COMMAND_STRUCT redisCommandTable[] = {
 /* bitmap */
+// 命令，描述、执行时长、版本、
 {MAKE_CMD("bitcount","Counts the number of set bits (population counting) in a string.","O(N)","2.6.0",CMD_DOC_NONE,NULL,NULL,"bitmap",COMMAND_GROUP_BITMAP,BITCOUNT_History,1,BITCOUNT_Tips,0,bitcountCommand,-2,CMD_READONLY,ACL_CATEGORY_BITMAP,BITCOUNT_Keyspecs,1,NULL,2),.args=BITCOUNT_Args},
 {MAKE_CMD("bitfield","Performs arbitrary bitfield integer operations on strings.","O(1) for each subcommand specified","3.2.0",CMD_DOC_NONE,NULL,NULL,"bitmap",COMMAND_GROUP_BITMAP,BITFIELD_History,0,BITFIELD_Tips,0,bitfieldCommand,-2,CMD_WRITE|CMD_DENYOOM,ACL_CATEGORY_BITMAP,BITFIELD_Keyspecs,1,bitfieldGetKeys,2),.args=BITFIELD_Args},
 {MAKE_CMD("bitfield_ro","Performs arbitrary read-only bitfield integer operations on strings.","O(1) for each subcommand specified","6.0.0",CMD_DOC_NONE,NULL,NULL,"bitmap",COMMAND_GROUP_BITMAP,BITFIELD_RO_History,0,BITFIELD_RO_Tips,0,bitfieldroCommand,-2,CMD_READONLY|CMD_FAST,ACL_CATEGORY_BITMAP,BITFIELD_RO_Keyspecs,1,NULL,2),.args=BITFIELD_RO_Args},

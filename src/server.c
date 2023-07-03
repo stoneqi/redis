@@ -3022,6 +3022,7 @@ void setImplicitACLCategories(struct redisCommand *c) {
  *
  * On success, the function return C_OK. Otherwise C_ERR is returned and we won't
  * add this command in the commands dict. */
+// 检测命令是否能在当前模式下执行
 int populateCommandStructure(struct redisCommand *c) {
     /* If the command marks with CMD_SENTINEL, it exists in sentinel. */
     if (!(c->flags & CMD_SENTINEL) && server.sentinel_mode)
@@ -3065,6 +3066,7 @@ extern struct redisCommand redisCommandTable[];
 
 /* Populates the Redis Command Table dict from the static table in commands.c
  * which is auto generated from the json files in the commands folder. */
+// 将当前可执行的命令写入commands， 不同模式下可执行命令不一致。
 void populateCommandTable(void) {
     int j;
     struct redisCommand *c;
@@ -3559,6 +3561,7 @@ void call(client *c, int flags) {
     if (monotonicGetType() == MONOTONIC_CLOCK_HW)
         monotonic_start = getMonotonicUs();
 
+    // 执行不同的命令
     c->cmd->proc(c);
 
     exitExecutionUnit();
@@ -3651,6 +3654,7 @@ void call(client *c, int flags) {
      * We never propagate EXEC explicitly, it will be implicitly
      * propagated if needed (see propagatePendingCommands).
      * Also, module commands take care of themselves */
+    // 复制这个命令到 AOF 和 replication 副本连接
     if (flags & CMD_CALL_PROPAGATE &&
         (c->flags & CLIENT_PREVENT_PROP) != CLIENT_PREVENT_PROP &&
         c->cmd->proc != execCommand &&
@@ -3718,6 +3722,7 @@ void call(client *c, int flags) {
         server.stat_peak_memory = zmalloc_used;
 
     /* Do some maintenance job and cleanup */
+    // 写命令到 aof 缓冲区
     afterCommand(c);
 
     /* Remember the replication offset of the client, right after its last
@@ -3865,7 +3870,8 @@ uint64_t getCommandFlags(client *c) {
  * If C_OK is returned the client is still alive and valid and
  * other operations can be performed by the caller. Otherwise
  * if C_ERR is returned the client was destroyed (i.e. after QUIT). */
-int –processCommand(client *c) {
+//
+int processCommand(client *c) {
     if (!scriptIsTimedout()) {
         /* Both EXEC and scripts call call() directly so there should be
          * no way in_exec or scriptIsRunning() is 1.
@@ -3904,13 +3910,16 @@ int –processCommand(client *c) {
      * such as wrong arity, bad command name and so forth.
      * In case we are reprocessing a command after it was blocked,
      * we do not have to repeat the same checks */
+    // 寻找命令执行
     if (!client_reprocessing_command) {
+        // 获取当前要执行的命令
         c->cmd = c->lastcmd = c->realcmd = lookupCommand(c->argv,c->argc);
         sds err;
         if (!commandCheckExistence(c, &err)) {
             rejectCommandSds(c, err);
             return C_OK;
         }
+        // 检测参数数量是否一致
         if (!commandCheckArity(c, &err)) {
             rejectCommandSds(c, err);
             return C_OK;
@@ -4004,6 +4013,7 @@ int –processCommand(client *c) {
     /* Disconnect some clients if total clients memory is too high. We do this
      * before key eviction, after the last command was executed and consumed
      * some client output buffer memory. */
+    // 如果连接数太多关闭连接；执行key回收
     evictClients();
     if (server.current_client == NULL) {
         /* If we evicted ourself then abort processing the command */

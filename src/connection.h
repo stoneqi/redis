@@ -75,30 +75,45 @@ typedef struct ConnectionType {
     int (*configure)(void *priv, int reconfigure);
 
     /* ae & accept & listen & error & address handler */
+    // fd有事件发生处理函数，包含了读写事件，最终调用conn 的 write 和 read
     void (*ae_handler)(struct aeEventLoop *el, int fd, void *clientData, int mask);
+    // 处理新建链接事件，会将该事件加入事件循环里面
     aeFileProc *accept_handler;
     int (*addr)(connection *conn, char *ip, size_t ip_len, int *port, int remote);
     int (*is_local)(connection *conn);
+    // listen ，启动一个端口监听外部链接
     int (*listen)(connListener *listener);
 
     /* create/shutdown/close connection */
+    // 创建一个 connection
     connection* (*conn_create)(void);
+    // 创建一个 connection ，使用参数fd
     connection* (*conn_create_accepted)(int fd, void *priv);
+    
+    // close函数函数会关闭套接字，如果由其他进程共享着这个套接字，那么它仍然是打开的，这个连接仍然可以用来读和写。
+    //shutdown会切断进程共享的套接字的所有连接，不管引用计数是否为0，由第二个参数选择断连的方式。
     void (*shutdown)(struct connection *conn);
+    // 关闭socket 端口，
     void (*close)(struct connection *conn);
 
     /* connect & accept */
+    // 建立一个新链接，并将链接加入event loop，connect_handler 为该链接有新加入链接的处理方法。
+    // 该方法做为客户端链接slave节点或 cluster集群模式的其他节点
     int (*connect)(struct connection *conn, const char *addr, int port, const char *source_addr, ConnectionCallbackFunc connect_handler);
+    // 阻塞式链接
     int (*blocking_connect)(struct connection *conn, const char *addr, int port, long long timeout);
+    // 处理客户端传入的 accept_handler 的链接。处理accept请求
     int (*accept)(struct connection *conn, ConnectionCallbackFunc accept_handler);
 
     /* IO */
     int (*write)(struct connection *conn, const void *data, size_t data_len);
     int (*writev)(struct connection *conn, const struct iovec *iov, int iovcnt);
     int (*read)(struct connection *conn, void *buf, size_t buf_len);
+    // 设置读写handler ，并将该链接加入 event_loopz中做相应处理
     int (*set_write_handler)(struct connection *conn, ConnectionCallbackFunc handler, int barrier);
     int (*set_read_handler)(struct connection *conn, ConnectionCallbackFunc handler);
     const char *(*get_last_error)(struct connection *conn);
+    // 同步读写
     ssize_t (*sync_write)(struct connection *conn, char *ptr, ssize_t size, long long timeout);
     ssize_t (*sync_read)(struct connection *conn, char *ptr, ssize_t size, long long timeout);
     ssize_t (*sync_readline)(struct connection *conn, char *ptr, ssize_t size, long long timeout);

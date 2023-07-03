@@ -254,6 +254,7 @@ static const char *connSocketGetLastError(connection *conn) {
     return strerror(conn->last_errno);
 }
 
+// 处理Scoket事件分发
 static void connSocketEventHandler(struct aeEventLoop *el, int fd, void *clientData, int mask)
 {
     UNUSED(el);
@@ -400,6 +401,7 @@ static ConnectionType CT_Socket = {
     .configure = NULL,
 
     /* ae & accept & listen & error & address handler */
+    // 链接有事件发生处理函数
     .ae_handler = connSocketEventHandler,
     .accept_handler = connSocketAcceptHandler,
     .addr = connSocketAddr,
