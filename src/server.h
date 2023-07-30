@@ -685,12 +685,12 @@ typedef enum {
 #define BUSY_MODULE_YIELD_CLIENTS (1<<1)
 
 /*-----------------------------------------------------------------------------
- * Data types
+ * Data types  
  *----------------------------------------------------------------------------*/
 
 /* A redis object, that is a type able to hold a string / list / set */
 
-/* The actual Redis Object */
+/* The actual Redis Object */  //五个数据类型
 #define OBJ_STRING 0    /* String object. */
 #define OBJ_LIST 1      /* List object. */
 #define OBJ_SET 2       /* Set object. */
@@ -708,7 +708,9 @@ typedef enum {
  * by a 64 bit module type ID, which has a 54 bits module-specific signature
  * in order to dispatch the loading to the right module, plus a 10 bits
  * encoding version. */
+// 模块 类型 ，保存一些自定义的类型
 #define OBJ_MODULE 5    /* Module object. */
+// stream 流对象
 #define OBJ_STREAM 6    /* Stream object. */
 #define OBJ_TYPE_MAX 7  /* Maximum number of object types */
 
@@ -734,6 +736,7 @@ struct RedisModuleCommand;
  * to serialize and deserialize the value in the RDB file, rewrite the AOF
  * log, create the digest for "DEBUG DIGEST", and free the value when a key
  * is deleted. */
+// 定义了模型的接口，主流程中通过这些函数调用模块
 typedef void *(*moduleTypeLoadFunc)(struct RedisModuleIO *io, int encver);
 typedef void (*moduleTypeSaveFunc)(struct RedisModuleIO *io, void *value);
 typedef int (*moduleTypeAuxLoadFunc)(struct RedisModuleIO *rdb, int encver, int when);
@@ -896,13 +899,20 @@ struct RedisModuleDigest {
 #define OBJ_SHARED_REFCOUNT INT_MAX     /* Global object never destroyed. */
 #define OBJ_STATIC_REFCOUNT (INT_MAX-1) /* Object allocated in the stack. */
 #define OBJ_FIRST_SPECIAL_REFCOUNT OBJ_STATIC_REFCOUNT
+
+// redis 对象
 struct redisObject {
+    // 4 位表示类型
     unsigned type:4;
+    // 4 为表示编码
     unsigned encoding:4;
+    // 24 位 LRU
     unsigned lru:LRU_BITS; /* LRU time (relative to global lru_clock) or
                             * LFU data (least significant 8 bits frequency
                             * and most significant 16 bits access time). */
+    // 饮用数量
     int refcount;
+    // 数据指针
     void *ptr;
 };
 
@@ -965,18 +975,29 @@ typedef struct clusterSlotToKeyMapping clusterSlotToKeyMapping;
  * by integers from 0 (the default database) up to the max configured
  * database. The database number is the 'id' field in the structure. */
 typedef struct redisDb {
+    // 实际数据
     dict *dict;                 /* The keyspace for this DB */
+    // 过期的key
     dict *expires;              /* Timeout of keys with a timeout set */
+    // 客户端等待中的key
     dict *blocking_keys;        /* Keys with clients waiting for data (BLPOP)*/
+
     dict *blocking_keys_unblock_on_nokey;   /* Keys with clients waiting for
                                              * data, and should be unblocked if key is deleted (XREADEDGROUP).
                                              * This is a subset of blocking_keys*/
+    // 收到一个push阻塞key
     dict *ready_keys;           /* Blocked keys that received a PUSH */
+    // watch key
     dict *watched_keys;         /* WATCHED keys for MULTI/EXEC CAS */
+    // id
     int id;                     /* Database ID */
+    // 平均ttl
     long long avg_ttl;          /* Average TTL, just for stats */
+    // 活跃过期
     unsigned long expires_cursor; /* Cursor of the active expire cycle. */
+
     list *defrag_later;         /* List of key names to attempt to defrag one by one, gradually. */
+    // key对应的槽，仅在cluster模式生效
     clusterSlotToKeyMapping *slots_to_keys; /* Array of slots to keys. Only used in cluster mode (db 0). */
 } redisDb;
 
@@ -994,6 +1015,7 @@ typedef struct rdbLoadingCtx {
 }rdbLoadingCtx;
 
 /* Client MULTI/EXEC state */
+// 多命令
 typedef struct multiCmd {
     robj **argv;
     int argv_len;
@@ -1151,18 +1173,31 @@ typedef struct {
 #endif
 
 typedef struct client {
+    // 自增ID
     uint64_t id;            /* Client incremental unique ID. */
+    // 客户端类型
     uint64_t flags;         /* Client flags: CLIENT_* macros. */
+    // conn 链接
     connection *conn;
+    // resp 协议版本
     int resp;               /* RESP protocol version. Can be 2 or 3. */
+    // 当前数据哭
     redisDb *db;            /* Pointer to currently SELECTed DB. */
+    // 客户端设置名字
     robj *name;             /* As set by CLIENT SETNAME. */
+    // 当前库的名字，客户端设置
     robj *lib_name;         /* The client library name as set by CLIENT SETINFO. */
+    // 版本
     robj *lib_ver;          /* The client library version as set by CLIENT SETINFO. */
+    // 客户端查询buffer
     sds querybuf;           /* Buffer we use to accumulate client queries. */
+    // 已经读取的buffer
     size_t qb_pos;          /* The position we have read in querybuf. */
+    // 最近100ms 读取的buf最大值
     size_t querybuf_peak;   /* Recent (100ms or more) peak of querybuf size. */
+    // 参数个数
     int argc;               /* Num of arguments of current command. */
+    // 参数
     robj **argv;            /* Arguments of current command. */
     int argv_len;           /* Size of argv array (may be more than argc) */
     int original_argc;      /* Num of arguments of original command if arguments were rewritten. */
