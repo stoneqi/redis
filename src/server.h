@@ -562,6 +562,7 @@ typedef enum {
  * properties common to multiple policies is faster. */
 #define MAXMEMORY_FLAG_LRU (1<<0)
 #define MAXMEMORY_FLAG_LFU (1<<1)
+// 淘汰策略是否针对所有key
 #define MAXMEMORY_FLAG_ALLKEYS (1<<2)
 #define MAXMEMORY_FLAG_NO_SHARED_INTEGERS \
     (MAXMEMORY_FLAG_LRU|MAXMEMORY_FLAG_LFU)
@@ -979,9 +980,9 @@ typedef struct redisDb {
     dict *dict;                 /* The keyspace for this DB */
     // 过期的key
     dict *expires;              /* Timeout of keys with a timeout set */
-    // 客户端等待中的key
+    // 客户端阻塞等待中的key
     dict *blocking_keys;        /* Keys with clients waiting for data (BLPOP)*/
-
+    // 如果key不存在 则客户端应该接触阻塞
     dict *blocking_keys_unblock_on_nokey;   /* Keys with clients waiting for
                                              * data, and should be unblocked if key is deleted (XREADEDGROUP).
                                              * This is a subset of blocking_keys*/

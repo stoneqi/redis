@@ -13494,6 +13494,7 @@ int RM_GetDbIdFromDefragCtx(RedisModuleDefragCtx *ctx) {
 void moduleRegisterCoreAPI(void) {
     server.moduleapi = dictCreate(&moduleAPIDictType);
     server.sharedapi = dictCreate(&moduleAPIDictType);
+    //  
     REGISTER_API(Alloc);
     REGISTER_API(TryAlloc);
     REGISTER_API(Calloc);

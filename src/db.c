@@ -63,10 +63,13 @@ void updateLFU(robj *val) {
  * lookupKeyRead(), lookupKeyWrite() and their ...WithFlags() variants.
  *
  * Side-effects of calling this function:
- *
+ *  一个 key 将过期
  * 1. A key gets expired if it reached it's TTL.
+ * 最后访问时间被更新 lru lfu
  * 2. The key's last access time is updated.
+ * 全局 key hits miss 更新
  * 3. The global keys hits/misses stats are updated (reported in INFO).
+ * keymiss 消息
  * 4. If keyspace notifications are enabled, a "keymiss" notification is fired.
  *
  * Flags change the behavior of this command:

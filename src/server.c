@@ -1127,6 +1127,7 @@ static inline void updateCachedTimeWithUs(int update_daylight_info, const long l
  * info or not using the 'update_daylight_info' argument. Normally we update
  * such info only when calling this function from serverCron() but not when
  * calling it from call(). */
+// 缓存 unix time  避免直接 call time 函数
 void updateCachedTime(int update_daylight_info) {
     const long long us = ustime();
     updateCachedTimeWithUs(update_daylight_info, us);
@@ -1340,6 +1341,11 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
      * Note that you can change the resolution altering the
      * LRU_CLOCK_RESOLUTION define. */
     //TODO LRU锁实现机制
+    // LRU模式下，对象头中的lru字段存储的是redis时钟 server.lruclock ，redis时钟是一个24bit的整数，默认值是unix时间戳对2^24取模的结果，24个bit意味着可以存储194天左右的时间，194天后该值将会被清0。
+    // 当每个key被访问一次的时候，其对象头中的lru字段会被更新成当前的server.lruclock。
+    // 默认情况下，server.lruclock 每毫秒更新一次，在定时任务serverCron中设置。redis中很多定时任务都在serverCron中处理，例如大型hash渐进式迁移、过期key的主动淘汰，触发bgsave、bgaofrewrite等。
+    // 如果server.lruclock没有溢出折返，其的内容值是一直递增的，此时每个对象头中的lru字段不会超过server.lruclock的值，
+    // 如果对象头中的lru字段超过了server.lruclock的值，说明server.lruclock已经折返了，通过这两个逻辑，可以得出对象有多长时间没有被访问。
     server.lruclock = getLRUClock();
 
     // 升级内存统计信息
@@ -2146,6 +2152,7 @@ void initServerConfig(void) {
      * redis.conf using the rename-command directive. */
     server.commands = dictCreate(&commandTableDictType);
     server.orig_commands = dictCreate(&commandTableDictType);
+    // 组装可执行的命令和具体函数
     populateCommandTable();
 
     /* Debugging */
@@ -2648,7 +2655,7 @@ void initServer(void) {
         exit(1);
     }
 
-    // 创建一些共享的对象， 为什么不用产量
+    // 创建一些共享的对象， 为什么不用常量
     createSharedObjects();
 
     // 调整打开文件数量限制
