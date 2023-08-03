@@ -699,7 +699,7 @@ void *dictFetchValue(dict *d, const void *key) {
  * `dictTwoPhaseUnlinkFree` with it in order to unlink and release it. Otherwise if
  * the key is not found, NULL is returned. These two functions should be used in pair.
  * `dictTwoPhaseUnlinkFind` pauses rehash and `dictTwoPhaseUnlinkFree` resumes rehash.
- *
+ *  //  dictTwoPhaseUnlinkFind 阶段将暂停rehash，  dictTwoPhaseUnlinkFree 阶段恢复rehash
  * We can use like this:
  *
  * dictEntry *de = dictTwoPhaseUnlinkFind(db->dict,key->ptr,&plink, &table);

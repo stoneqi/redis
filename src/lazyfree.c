@@ -155,6 +155,7 @@ size_t lazyfreeGetFreeEffort(robj *key, robj *obj, int dbid) {
  * slower... So under a certain limit we just free the object synchronously. */
 #define LAZYFREE_THRESHOLD 64
 
+// 删除一个 redis object， 如果对象内存占用比较大，则异步删除它
 /* Free an object, if the object is huge enough, free it in async way. */
 void freeObjAsync(robj *key, robj *obj, int dbid) {
     size_t free_effort = lazyfreeGetFreeEffort(key,obj,dbid);

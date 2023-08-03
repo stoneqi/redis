@@ -382,6 +382,7 @@ int dbGenericDelete(redisDb *db, robj *key, int async, int flags) {
 
         /* Deleting an entry from the expires dict will not free the sds of
         * the key, because it is shared with the main dictionary. */
+       // 删除这个key 不会释放key的 sds空间，这个空间被dict共用
         if (dictSize(db->expires) > 0) dictDelete(db->expires,key->ptr);
         dictTwoPhaseUnlinkFree(db->dict,de,plink,table);
         return 1;

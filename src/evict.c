@@ -212,6 +212,7 @@ void evictionPoolPopulate(int dbid, dict *sampledict, dict *keydict, struct evic
             /* Inserting in the middle. Now k points to the first element
              * greater than the element to insert.  */
             // 如果最后一个数据为空，则直接将当前内存布局统一后移一位。
+            // cache 保存被删除key的 cached 值
             if (pool[EVPOOL_SIZE-1].key == NULL) {
                 /* Free space on the right? Insert at k shifting
                  * all the elements from k to end to the right. */
@@ -230,6 +231,8 @@ void evictionPoolPopulate(int dbid, dict *sampledict, dict *keydict, struct evic
                 /* Shift all elements on the left of k (included) to the
                  * left, so we discard the element with smaller idle time. */
 
+                // 保存待删除entry的cache内存，作为待插入entry 的cache 元素，供覆盖使用。
+                // 避免了删除和重新分配内存，可以直接给 entry 使用，
                 sds cached = pool[0].cached; /* Save SDS before overwriting. */
                 if (pool[0].key != pool[0].cached) sdsfree(pool[0].key);
                 // 将第一个开头的往前复制一个
@@ -245,15 +248,17 @@ void evictionPoolPopulate(int dbid, dict *sampledict, dict *keydict, struct evic
          * premature optimization bla bla bla. */
         // 如果key 超过sds限制
         int klen = sdslen(key);
+        
         if (klen > EVPOOL_CACHED_SDS_SIZE) {
+            // 超过sds 缓存大小，则复制一个新的key，保存在key中，涉及到重新申请内存
             // 则保存在key中，不更新cache
             pool[k].key = sdsdup(key);
         } else {
-            // key 复制到 cache里面
+            // 直接内存复制，复用已有内存，避免申请内存，key 复制到 cache里面
             memcpy(pool[k].cached,key,klen+1);
             // 
             sdssetlen(pool[k].cached,klen);
-            // 保存cache
+            // 保存cache， 存储指针。
             pool[k].key = pool[k].cached;
         }
         // 记录该key的 最久未使用
@@ -617,6 +622,7 @@ int performEvictions(void) {
     /* Try to smoke-out bugs (server.also_propagate should be empty here) */
     serverAssert(server.also_propagate.numops == 0);
 
+    // 已释放的内存下于需要的内存
     while (mem_freed < (long long)mem_tofree) {
         int j, k, i;
         static unsigned int next_db = 0;
@@ -663,7 +669,9 @@ int performEvictions(void) {
                     }
 
                     /* Remove the entry from the pool. */
-                    // 如果 key 已经过期或者被删除，则从pool中删除该key
+                    // 如果 key 和 cached 不是相同的地址位置，说明未共用缓存，删除该key时，需要释放内存
+                    // 如果de 存在在dict中，需要淘汰该key，设置key==null；如果de不存在dict中
+                    // 也需要清除key = null
                     if (pool[k].key != pool[k].cached)
                         sdsfree(pool[k].key);
                     pool[k].key = NULL;
@@ -718,6 +726,7 @@ int performEvictions(void) {
              *
              * AOF and Output buffer memory will be freed eventually so
              * we only care about memory used by the key space. */
+            // zmalloc是redis自己实现的内存分配，是对linux中malloc，free，relloc这3个函数的一个封装。
             delta = (long long) zmalloc_used_memory();
             latencyStartMonitor(eviction_latency);
             dbGenericDelete(db,keyobj,server.lazyfree_lazy_eviction,DB_FLAG_KEY_EVICTED);
