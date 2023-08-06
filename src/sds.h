@@ -39,7 +39,7 @@ extern const char *SDS_NOINIT;
 #include <sys/types.h>
 #include <stdarg.h>
 #include <stdint.h>
-
+// sds 字符指针
 typedef char *sds;
 
 /* Note: sdshdr5 is never used, we just access the flags byte directly.

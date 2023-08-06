@@ -104,6 +104,7 @@
 /* 'noinline' attribute is intended to prevent the `-Wstringop-overread` warning
  * when using gcc-12 later with LTO enabled. It may be removed once the
  * bug[https://gcc.gnu.org/bugzilla/show_bug.cgi?id=96503] is fixed. */
+ // 三种不同内存申请函数
 __attribute__((malloc,alloc_size(1),noinline)) void *zmalloc(size_t size);
 __attribute__((malloc,alloc_size(1),noinline)) void *zcalloc(size_t size);
 __attribute__((malloc,alloc_size(1,2),noinline)) void *zcalloc_num(size_t num, size_t size);
@@ -112,6 +113,14 @@ __attribute__((malloc,alloc_size(1),noinline)) void *ztrymalloc(size_t size);
 __attribute__((malloc,alloc_size(1),noinline)) void *ztrycalloc(size_t size);
 __attribute__((alloc_size(2),noinline)) void *ztryrealloc(void *ptr, size_t size);
 void zfree(void *ptr);
+// The value returned by malloc_usable_size() may be greater than
+    //    the requested size of the allocation because of alignment and
+    //    minimum size constraints.  Although the excess bytes can be
+    //    overwritten by the application without ill effects, this is not
+    //    good programming practice: the number of excess bytes in an
+    //    allocation depends on the underlying implementation.
+//动态内存分配并返回可用内存大小 usable；
+// 由于内存对齐和最小内存限制，申请内存可能会大于需要的内存
 void *zmalloc_usable(size_t size, size_t *usable);
 void *zcalloc_usable(size_t size, size_t *usable);
 void *zrealloc_usable(void *ptr, size_t size, size_t *usable);
@@ -119,9 +128,31 @@ void *ztrymalloc_usable(size_t size, size_t *usable);
 void *ztrycalloc_usable(size_t size, size_t *usable);
 void *ztryrealloc_usable(void *ptr, size_t size, size_t *usable);
 void zfree_usable(void *ptr, size_t *usable);
+
+/**
+ * @brief 复制字符串
+ * 
+ */
+ * @param s 字符串的地址
+ * @return 返回新建字符串的地址
+ */
 __attribute__((malloc)) char *zstrdup(const char *s);
+/**
+ * @brief 返回已使用的内存
+ * 
+ */
+ * @param  
+ * @return 
+ */
 size_t zmalloc_used_memory(void);
 void zmalloc_set_oom_handler(void (*oom_handler)(size_t));
+/**
+ * @brief 获取实际使用的物理内存
+ * 
+ */
+ * @param  
+ * @return 
+ */
 size_t zmalloc_get_rss(void);
 int zmalloc_get_allocator_info(size_t *allocated, size_t *active, size_t *resident);
 void set_jemalloc_bg_thread(int enable);

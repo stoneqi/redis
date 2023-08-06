@@ -114,6 +114,7 @@ sds _sdsnewlen(const void *init, size_t initlen, int trymalloc) {
 
     assert(initlen + hdrlen + 1 > initlen); /* Catch size_t overflow */
     sh = trymalloc?
+    // +1 为了存储/0"
         s_trymalloc_usable(hdrlen+initlen+1, &usable) :
         s_malloc_usable(hdrlen+initlen+1, &usable);
     if (sh == NULL) return NULL;
@@ -121,8 +122,12 @@ sds _sdsnewlen(const void *init, size_t initlen, int trymalloc) {
         init = NULL;
     else if (!init)
         memset(sh, 0, hdrlen+initlen+1);
+    // 指向实际字符串的位置，为了兼容C语言字符串风格
     s = (char*)sh+hdrlen;
+    //因为可以看到地址的顺序是 len,alloc,flag,buf,目前s是指向buf，
+    //那么后退1位,fp 正好指向了flag对应的地址。
     fp = ((unsigned char*)s)-1;
+    // 等于 initlen，申请内存的长度
     usable = usable-hdrlen-1;
     if (usable > sdsTypeMaxSize(type))
         usable = sdsTypeMaxSize(type);
