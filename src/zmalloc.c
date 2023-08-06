@@ -74,6 +74,16 @@ void zlibc_free(void *ptr) {
 #define MALLOC_MIN_SIZE(x) ((x) > 0 ? (x) : sizeof(long))
 
 /* Explicitly override malloc/free etc when using tcmalloc. */
+// 覆盖原来的 malloc 和 free 函数
+
+// (1) malloc()
+// 在内存的动态存储区中分配一块长度为size字节的连续区域，参数size为需要内存空间的长度，返回该区域的首地址
+
+// (2) calloc()
+// 与malloc相似,参数sizeOfElement为申请地址的单位元素长度,numElements为元素个数，即在内存中申请numElements*sizeOfElement字节大小的连续地址空间.
+
+// (3) realloc()
+// 给一个已经分配了地址的指针重新分配空间,参数ptr为原有的空间地址,newsize是重新申请的地址长度.
 #if defined(USE_TCMALLOC)
 #define malloc(size) tc_malloc(size)
 #define calloc(count,size) tc_calloc(count,size)
@@ -88,9 +98,11 @@ void zlibc_free(void *ptr) {
 #define dallocx(ptr,flags) je_dallocx(ptr,flags)
 #endif
 
+//申请/ 释放内存的更新使用内存
 #define update_zmalloc_stat_alloc(__n) atomicIncr(used_memory,(__n))
 #define update_zmalloc_stat_free(__n) atomicDecr(used_memory,(__n))
 
+// 已使用的内存
 static redisAtomic size_t used_memory = 0;
 
 static void zmalloc_default_oom(size_t size) {
@@ -113,6 +125,8 @@ void *extend_to_usable(void *ptr, size_t size) {
  * '*usable' is set to the usable size if non NULL. */
 static inline void *ztrymalloc_usable_internal(size_t size, size_t *usable) {
     /* Possible overflow, return NULL, so that the caller can panic or handle a failed allocation. */
+    // size_t 是一些C/C++标准在stddef.h中定义的，size_t 类型表示C中任何对象所能达到的最大长度，它是无符号整数。
+    // SIZE_MAX 是 size_t 类型的最大值 
     if (size >= SIZE_MAX/2) return NULL;
     void *ptr = malloc(MALLOC_MIN_SIZE(size)+PREFIX_SIZE);
 
@@ -221,10 +235,12 @@ void *ztrycalloc_usable(size_t size, size_t *usable) {
 void *zcalloc_num(size_t num, size_t size) {
     /* Ensure that the arguments to calloc(), when multiplied, do not wrap.
      * Division operations are susceptible to divide-by-zero errors so we also check it. */
+    // 如果 num*size超过最大内存，则无法分配
     if ((size == 0) || (num > SIZE_MAX/size)) {
         zmalloc_oom_handler(SIZE_MAX);
         return NULL;
     }
+    // 尝试分配内存
     void *ptr = ztrycalloc_usable_internal(num*size, NULL);
     if (!ptr) zmalloc_oom_handler(num*size);
     return ptr;
@@ -399,6 +415,7 @@ void zfree_usable(void *ptr, size_t *usable) {
 #endif
 }
 
+// 复制字符串
 char *zstrdup(const char *s) {
     size_t l = strlen(s)+1;
     char *p = zmalloc(l);
@@ -420,6 +437,9 @@ void zmalloc_set_oom_handler(void (*oom_handler)(size_t)) {
 /* Use 'MADV_DONTNEED' to release memory to operating system quickly.
  * We do that in a fork child process to avoid CoW when the parent modifies
  * these shared pages. */
+// madvise会向内核提供一个针对于于地址区间的I/O的建议，内核可能会采纳这个建议，会做一些预读的操作。例如MADV_SEQUENTIAL这个就表明顺序预读。
+
+// 如果感觉这样还不给力，可以采用read操作，从mmap文件的首地址开始到最终位置，顺序的读取一遍，这样可以完全保证mmap后的数据全部load到内存中。
 void zmadvise_dontneed(void *ptr) {
 #if defined(USE_JEMALLOC) && defined(__linux__)
     static size_t page_size = 0;
@@ -451,6 +471,13 @@ void zmadvise_dontneed(void *ptr) {
  * For this kind of "fast RSS reporting" usages use instead the
  * function RedisEstimateRSS() that is a much faster (and less precise)
  * version of the function. */
+// zmalloc_get_rss 获取使用的物理内存，函数执行不会很快，涉及到访问磁盘
+// 所有在释放过期内存和清除对象时一般使用 RedisEstimateRSS()
+
+// VSS - Virtual Set Size 虚拟耗用内存
+// RSS - Resident Set Size 实际使用物理内存
+// USS - Unique Set Size 进程独自占用的物理内存
+// PSS - Proportional Set Size 实际使用的物理内存
 
 #if defined(HAVE_PROC_STAT)
 #include <sys/types.h>
@@ -788,6 +815,7 @@ size_t zmalloc_get_private_dirty(long pid) {
  * 3) Was modified for Redis by Matt Stancliff.
  * 4) This note exists in order to comply with the original license.
  */
+// 获得物理内存的大小
 size_t zmalloc_get_memory_size(void) {
 #if defined(__unix__) || defined(__unix) || defined(unix) || \
     (defined(__APPLE__) && defined(__MACH__))

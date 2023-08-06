@@ -51,7 +51,9 @@
  * resizing and rehashing of the hash table as needed. This is very important
  * for Redis, as we use copy-on-write and don't want to move too much memory
  * around when there is a child performing saving operations.
- *
+ * dictEnableResize 和 dictDisableResize 开启和关闭 resize， 使用写时复制防止使用太多的
+ * 内存。
+ * dict_can_resize 被设置 DICT_RESIZE_AVOID， 不是所有的resize都被阻止，如果
  * Note that even when dict_can_resize is set to DICT_RESIZE_AVOID, not all
  * resizes are prevented: a hash table is still allowed to grow if the ratio
  * between the number of elements and the buckets > dict_force_resize_ratio. */

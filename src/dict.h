@@ -82,15 +82,21 @@ typedef struct dictType {
 #define DICTHT_SIZE_MASK(exp) ((exp) == -1 ? 0 : (DICTHT_SIZE(exp))-1)
 
 struct dict {
+    // dcit 类型接口 实现对应的函数
     dictType *type;
 
+    // 两个hash table，供 rehash 使用
     dictEntry **ht_table[2];
+    // 已使用的数据
     unsigned long ht_used[2];
 
+    // rehashidx的索引，从数组0到最大值 依次做rehash
     long rehashidx; /* rehashing not in progress if rehashidx == -1 */
 
     /* Keep small vars at end for optimal (minimal) struct padding */
+    // 暂停rehash
     int16_t pauserehash; /* If >0 rehashing is paused (<0 indicates coding error) */
+    
     signed char ht_size_exp[2]; /* exponent of size. (size = 1<<exp) */
 
     void *metadata[];           /* An arbitrary number of bytes (starting at a

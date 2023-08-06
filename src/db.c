@@ -107,8 +107,11 @@ robj *lookupKey(redisDb *db, robj *key, int flags) {
             expire_flags |= EXPIRE_FORCE_DELETE_EXPIRED;
         if (flags & LOOKUP_NOEXPIRE)
             expire_flags |= EXPIRE_AVOID_DELETE_EXPIRED;
+        
+        // 如果key已经过期
         if (expireIfNeeded(db, key, expire_flags)) {
             /* The key is no longer valid. */
+            // val 设置为空值，实际内存没有释放
             val = NULL;
         }
     }
@@ -117,6 +120,7 @@ robj *lookupKey(redisDb *db, robj *key, int flags) {
         /* Update the access time for the ageing algorithm.
          * Don't do it if we have a saving child, as this will trigger
          * a copy on write madness. */
+        // 更新这个key的访问时间， 供过期算法使用
         if (server.current_client && server.current_client->flags & CLIENT_NO_TOUCH &&
             server.current_client->cmd->proc != touchCommand)
             flags |= LOOKUP_NOTOUCH;
@@ -1696,7 +1700,7 @@ void deleteExpiredKeyAndPropagate(redisDb *db, robj *keyobj) {
 /* Propagate expires into slaves and the AOF file.
  * When a key expires in the master, a DEL operation for this key is sent
  * to all the slaves and the AOF file if enabled.
- *
+ *  如果开启这个功能，失效指令传播到 slave 和 AOF中
  * This way the key expiry is centralized in one place, and since both
  * AOF and the master->slave link guarantee operation ordering, everything
  * will be consistent even if we allow write operations against expiring
@@ -1751,7 +1755,7 @@ int keyIsExpired(redisDb *db, robj *key) {
  * in a given key, but such key may be already logically expired even if
  * it still exists in the database. The main way this function is called
  * is via lookupKey*() family of functions.
- *
+ * // 
  * The behavior of the function depends on the replication role of the
  * instance, because by default replicas do not delete expired keys. They
  * wait for DELs from the master for consistency matters. However even
@@ -1759,21 +1763,26 @@ int keyIsExpired(redisDb *db, robj *key) {
  * so that read commands executed in the replica side will be able to
  * behave like if the key is expired even if still present (because the
  * master has yet to propagate the DEL).
- *
+ * // 默认的 replicas 不删除过期的key，等待从master过来的删除指令已保证一致性。
+ * // 但是，即使是副本也会尝试为函数提供一致的返回值，以便在副本端执行的读取命令
+ * // 将能够像密钥过期一样运行，即使密钥仍然存在（因为主节点尚未传播 DEL）
  * In masters as a side effect of finding a key which is expired, such
  * key will be evicted from the database. Also this may trigger the
  * propagation of a DEL/UNLINK command in AOF / replication stream.
- *
+ * 如果key是已过期，则这个key将从数据库中淘汰，也会从 aof 和 replication 执行删除
  * On replicas, this function does not delete expired keys by default, but
  * it still returns 1 if the key is logically expired. To force deletion
  * of logically expired keys even on replicas, use the EXPIRE_FORCE_DELETE_EXPIRED
  * flag. Note though that if the current client is executing
  * replicated commands from the master, keys are never considered expired.
- *
+ * 在replicas，这个函数不会删除过期key，即使key已经逻辑上过期这个函数会返回1。 使用 EXPIRE_FORCE_DELETE_EXPIRED 可以在replicas强制删除过期key。
+ * 但是如果正在执行replicated命令，key将不会执行过期。
+ * 
  * On the other hand, if you just want expiration check, but need to avoid
  * the actual key deletion and propagation of the deletion, use the
  * EXPIRE_AVOID_DELETE_EXPIRED flag.
- *
+ * 另一方面，如果仅仅想要 expiration 检测，使用 EXPIRE_AVOID_DELETE_EXPIRED
+ * 避免实际的key删除 和删除传播
  * The return value of the function is 0 if the key is still valid,
  * otherwise the function returns 1 if the key is expired. */
 int expireIfNeeded(redisDb *db, robj *key, int flags) {
@@ -1814,6 +1823,7 @@ int expireIfNeeded(redisDb *db, robj *key, int flags) {
         key = createStringObject(key->ptr, sdslen(key->ptr));
     }
     /* Delete the key */
+    // 删除这个key 并传播
     deleteExpiredKeyAndPropagate(db,key);
     if (static_key) {
         decrRefCount(key);

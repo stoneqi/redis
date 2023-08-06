@@ -729,6 +729,7 @@ int performEvictions(void) {
             // zmalloc是redis自己实现的内存分配，是对linux中malloc，free，relloc这3个函数的一个封装。
             delta = (long long) zmalloc_used_memory();
             latencyStartMonitor(eviction_latency);
+            // 同步 异步两种方式
             dbGenericDelete(db,keyobj,server.lazyfree_lazy_eviction,DB_FLAG_KEY_EVICTED);
             latencyEndMonitor(eviction_latency);
             latencyAddSampleIfNeeded("eviction-del",eviction_latency);
