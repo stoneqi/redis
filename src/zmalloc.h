@@ -132,7 +132,7 @@ void zfree_usable(void *ptr, size_t *usable);
 /**
  * @brief 复制字符串
  * 
- */
+ *
  * @param s 字符串的地址
  * @return 返回新建字符串的地址
  */
@@ -140,7 +140,7 @@ __attribute__((malloc)) char *zstrdup(const char *s);
 /**
  * @brief 返回已使用的内存
  * 
- */
+ *
  * @param  
  * @return 
  */
@@ -149,7 +149,7 @@ void zmalloc_set_oom_handler(void (*oom_handler)(size_t));
 /**
  * @brief 获取实际使用的物理内存
  * 
- */
+ *
  * @param  
  * @return 
  */
