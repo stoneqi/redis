@@ -45,14 +45,16 @@ typedef char *sds;
 /* Note: sdshdr5 is never used, we just access the flags byte directly.
  * However is here to document the layout of type 5 SDS strings. */
 struct __attribute__ ((__packed__)) sdshdr5 {
+    // 长度用 5 位来标识，所以最长长度为 1<<5 -1
     unsigned char flags; /* 3 lsb of type, and 5 msb of string length */
     char buf[];
 };
 struct __attribute__ ((__packed__)) sdshdr8 {
+    // 最长为 8 位，所以最长长度为 1<<8 -1
     uint8_t len; /* used */
     uint8_t alloc; /* excluding the header and null terminator */
     unsigned char flags; /* 3 lsb of type, 5 unused bits */
-    char buf[];
+    char buf[]; //
 };
 struct __attribute__ ((__packed__)) sdshdr16 {
     uint16_t len; /* used */
@@ -221,10 +223,17 @@ sds sdsnew(const char *init);
 sds sdsempty(void);
 sds sdsdup(const sds s);
 void sdsfree(sds s);
+
+// sds 长度扩大
 sds sdsgrowzero(sds s, size_t len);
+// sds append 操作
 sds sdscatlen(sds s, const void *t, size_t len);
+// sds append 操作
 sds sdscat(sds s, const char *t);
+// sds append 操作
 sds sdscatsds(sds s, const sds t);
+
+// 拷贝 t 到 sds 的 s 中。实现覆盖写
 sds sdscpylen(sds s, const char *t, size_t len);
 sds sdscpy(sds s, const char *t);
 
@@ -238,21 +247,40 @@ sds sdscatprintf(sds s, const char *fmt, ...);
 
 sds sdscatfmt(sds s, char const *fmt, ...);
 sds sdstrim(sds s, const char *cset);
+
+// 取子串覆盖原串
 void sdssubstr(sds s, size_t start, size_t len);
 void sdsrange(sds s, ssize_t start, ssize_t end);
 void sdsupdatelen(sds s);
 void sdsclear(sds s);
+// sds 比较
 int sdscmp(const sds s1, const sds s2);
+
+// 返回一个 sds 的双重指针
 sds *sdssplitlen(const char *s, ssize_t len, const char *sep, int seplen, int *count);
+// 统一 free
 void sdsfreesplitres(sds *tokens, int count);
+
+// 转小写
 void sdstolower(sds s);
+// 转大写
 void sdstoupper(sds s);
+
+// long long 转 string
 sds sdsfromlonglong(long long value);
+
+// append p 字符串到 s 的结尾，按 repr 函数将字符串转化为在 C++存储的形式。 " "123\n\r" "
 sds sdscatrepr(sds s, const char *p, size_t len);
 sds *sdssplitargs(const char *line, int *argc);
+
+// 将 s 中包括 from 的的字符替换为对应索引 to 的字符
 sds sdsmapchars(sds s, const char *from, const char *to, size_t setlen);
+
+// join 字符串
 sds sdsjoin(char **argv, int argc, char *sep);
 sds sdsjoinsds(sds *argv, int argc, const char *sep, size_t seplen);
+
+// 判断 s 是否需要 repr
 int sdsneedsrepr(const sds s);
 
 /* Callback for sdstemplate. The function gets called by sdstemplate

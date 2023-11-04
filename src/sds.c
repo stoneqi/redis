@@ -104,42 +104,55 @@ static inline size_t sdsTypeMaxSize(char type) {
 sds _sdsnewlen(const void *init, size_t initlen, int trymalloc) {
     void *sh;
     sds s;
+    // 根据字符串长度判断创建类型
     char type = sdsReqType(initlen);
     /* Empty strings are usually created in order to append. Use type 8
      * since type 5 is not good at this. */
     if (type == SDS_TYPE_5 && initlen == 0) type = SDS_TYPE_8;
+
+    // 获取改类型的头部长度，此时buf还为空，所以长度不包括buf
     int hdrlen = sdsHdrSize(type);
     unsigned char *fp; /* flags pointer. */
     size_t usable;
 
+    // 防止类型溢出，例如 initlen 为size_t的最大值，会溢出。+1 需要存储 "/0"
     assert(initlen + hdrlen + 1 > initlen); /* Catch size_t overflow */
+
+    // 申请内存， usable 是申请内存的长度，内存按固定大小分配，可能会超过 hdrlen+initlen+1
     sh = trymalloc?
-    // +1 为了存储/0"
         s_trymalloc_usable(hdrlen+initlen+1, &usable) :
         s_malloc_usable(hdrlen+initlen+1, &usable);
     if (sh == NULL) return NULL;
     if (init==SDS_NOINIT)
         init = NULL;
     else if (!init)
+        // 统一置0。多余的部分可能是乱码
         memset(sh, 0, hdrlen+initlen+1);
-    // 指向实际字符串的位置，为了兼容C语言字符串风格
+
+    // 指向实际字符串的位置，也就是buf的位置，为了兼容C语言字符串风格。
     s = (char*)sh+hdrlen;
+
     //因为可以看到地址的顺序是 len,alloc,flag,buf,目前s是指向buf，
     //那么后退1位,fp 正好指向了flag对应的地址。
     fp = ((unsigned char*)s)-1;
-    // 等于 initlen，申请内存的长度
+
+    // 去除头部和"/0" 后剩余的长度。实际能存放数据的长度。
     usable = usable-hdrlen-1;
+
+    // 大于该类型最大长度，追修改
     if (usable > sdsTypeMaxSize(type))
         usable = sdsTypeMaxSize(type);
     switch(type) {
+        // 该类型，8 位同时包扩了类型和长度
         case SDS_TYPE_5: {
             *fp = type | (initlen << SDS_TYPE_BITS);
             break;
         }
         case SDS_TYPE_8: {
+            // 找到对应头部的指针位置，赋值到 sh 指针上
             SDS_HDR_VAR(8,s);
-            sh->len = initlen;
-            sh->alloc = usable;
+            sh->len = initlen; // 长度
+            sh->alloc = usable; // 总可保存字符串长度
             *fp = type;
             break;
         }
@@ -165,8 +178,10 @@ sds _sdsnewlen(const void *init, size_t initlen, int trymalloc) {
             break;
         }
     }
+    // 拷贝数据到 sds 字符串中
     if (initlen && init)
         memcpy(s, init, initlen);
+    // 添加结束标识
     s[initlen] = '\0';
     return s;
 }
@@ -186,19 +201,24 @@ sds sdsempty(void) {
 }
 
 /* Create a new sds string starting from a null terminated C string. */
+// 创建一个SDS字符串
 sds sdsnew(const char *init) {
+    // strlen 不包括 "/0"
     size_t initlen = (init == NULL) ? 0 : strlen(init);
     return sdsnewlen(init, initlen);
 }
 
 /* Duplicate an sds string. */
+// 复制一个 sds 字符串
 sds sdsdup(const sds s) {
     return sdsnewlen(s, sdslen(s));
 }
 
 /* Free an sds string. No operation is performed if 's' is NULL. */
+// 释放 sds，先找到sds起始位置，然后调用内存 zfree 释放。
 void sdsfree(sds s) {
     if (s == NULL) return;
+    // s[-1] 为 type 位， sdsHdrSize为 type 的头长度，然后找到对应位置
     s_free((char*)s-sdsHdrSize(s[-1]));
 }
 
@@ -216,6 +236,7 @@ void sdsfree(sds s) {
  * The output will be "2", but if we comment out the call to sdsupdatelen()
  * the output will be "6" as the string was modified but the logical length
  * remains 6 bytes. */
+// 只改变长度，不修改内容
 void sdsupdatelen(sds s) {
     size_t reallen = strlen(s);
     sdssetlen(s, reallen);
@@ -225,6 +246,7 @@ void sdsupdatelen(sds s) {
  * However all the existing buffer is not discarded but set as free space
  * so that next append operations will not require allocations up to the
  * number of bytes previously available. */
+// 清楚，但是不释放实际内存
 void sdsclear(sds s) {
     sdssetlen(s, 0);
     s[0] = '\0';
