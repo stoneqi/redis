@@ -295,16 +295,22 @@ sds _sdsMakeRoomFor(sds s, size_t addlen, int greedy) {
 
     hdrlen = sdsHdrSize(type);
     assert(hdrlen + newlen + 1 > reqlen);  /* Catch size_t overflow */
+
     if (oldtype==type) {
+        // 类型不变，看能否重新再原位置申请空间。不做覆盖操作
+        // realloc() 函数将 ptr 指向的内存块的大小更改为 n 字节，并返回指向（可能已移动的）新内存块的指针。内存块的内容保存不变，其大小为新内存块大小和旧内存块大小中较小者。
         newsh = s_realloc_usable(sh, hdrlen+newlen+1, &usable);
         if (newsh == NULL) return NULL;
         s = (char*)newsh+hdrlen;
     } else {
         /* Since the header size changes, need to move the string forward,
          * and can't use realloc */
+        // type 改变，数据位置佑移动，需要 malloc，然后调整每一项数据
+        // 这些函数会分配一片内存区域，并返回该区域起始位置的地址。（在 64 位环境中，返回的字节地址可能超出 INTEGER*4 数值范围－必须将接收变量声明为 INTEGER*8 以免内存地址被截断。）内存区域并未以任何方式初始化，因此，不应假设它已预设为什么内容，尤其是零！
         newsh = s_malloc_usable(hdrlen+newlen+1, &usable);
         if (newsh == NULL) return NULL;
         memcpy((char*)newsh+hdrlen, s, len+1);
+        // 释放原来的数据
         s_free(sh);
         s = (char*)newsh+hdrlen;
         s[-1] = type;
