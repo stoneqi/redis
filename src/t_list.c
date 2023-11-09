@@ -497,7 +497,7 @@ void pushGenericCommand(client *c, int where, int xx) {
         lobj = createListListpackObject();
         dbAdd(c->db,c->argv[1],lobj);
     }
-
+    // 初始 创建 Listpack. 每次push 时 判断 是否  Listpack 和 QUICKLIST 是否相互转换
     listTypeTryConversionAppend(lobj,c->argv,2,c->argc-1,NULL,NULL);
     for (j = 2; j < c->argc; j++) {
         listTypePush(lobj,c->argv[j],where);

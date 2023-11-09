@@ -43,6 +43,7 @@ void sunionDiffGenericCommand(client *c, robj **setkeys, int setnum,
  *
  * The size hint indicates approximately how many items will be added which is
  * used to determine the initial representation. */
+// 判断创建什么类型的数据
 robj *setTypeCreate(sds value, size_t size_hint) {
     if (isSdsRepresentableAsLongLong(value,NULL) == C_OK && size_hint <= server.set_max_intset_entries)
         return createIntsetObject();

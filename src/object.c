@@ -120,6 +120,7 @@ robj *createEmbeddedStringObject(const char *ptr, size_t len) {
  * The current limit of 44 is chosen so that the biggest string object
  * we allocate as EMBSTR will still fit into the 64 byte arena of jemalloc. */
 #define OBJ_ENCODING_EMBSTR_SIZE_LIMIT 44
+// obj占据一些位置, 字符串小于 44 直接申请连续内存, 存储obj 和 string, 刚好在一个内存区域内. 避免查找翻转
 robj *createStringObject(const char *ptr, size_t len) {
     if (len <= OBJ_ENCODING_EMBSTR_SIZE_LIMIT)
         return createEmbeddedStringObject(ptr,len);
@@ -146,17 +147,20 @@ robj *tryCreateStringObject(const char *ptr, size_t len) {
 #define LL2STROBJ_AUTO 0       /* automatically create the optimal string object */
 #define LL2STROBJ_NO_SHARED 1  /* disallow shared objects */
 #define LL2STROBJ_NO_INT_ENC 2 /* disallow integer encoded objects. */
+// 如果存储是数字的话, 判定shared是否存在相同内容, 存在的话直接复用, 不用申请新的内存
 robj *createStringObjectFromLongLongWithOptions(long long value, int flag) {
     robj *o;
 
     if (value >= 0 && value < OBJ_SHARED_INTEGERS && flag == LL2STROBJ_AUTO) {
         o = shared.integers[value];
     } else {
+        // 如果数值小于LONG_MAX, 且未禁用 int 编码. 则直接使用 ptr 存储对应 value. 64bit
         if ((value >= LONG_MIN && value <= LONG_MAX) && flag != LL2STROBJ_NO_INT_ENC) {
             o = createObject(OBJ_STRING, NULL);
             o->encoding = OBJ_ENCODING_INT;
             o->ptr = (void*)((long)value);
         } else {
+            // 超过的话, 转为string ,按 string 格式存储.
             char buf[LONG_STR_SIZE];
             int len = ll2string(buf, sizeof(buf), value);
             o = createStringObject(buf, len);
