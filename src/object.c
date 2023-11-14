@@ -151,6 +151,7 @@ robj *tryCreateStringObject(const char *ptr, size_t len) {
 robj *createStringObjectFromLongLongWithOptions(long long value, int flag) {
     robj *o;
 
+    // 共10000个
     if (value >= 0 && value < OBJ_SHARED_INTEGERS && flag == LL2STROBJ_AUTO) {
         o = shared.integers[value];
     } else {

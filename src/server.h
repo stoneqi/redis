@@ -904,14 +904,35 @@ struct RedisModuleDigest {
 // redis 对象
 struct redisObject {
     // 4 位表示类型
+    // #define OBJ_STRING 0    /* String object. */
+    // #define OBJ_LIST 1      /* List object. */
+    // #define OBJ_SET 2       /* Set object. */
+    // #define OBJ_ZSET 3      /* Sorted set object. */
+    // #define OBJ_HASH 4      /* Hash object. */
     unsigned type:4;
     // 4 为表示编码
+    // #define OBJ_ENCODING_RAW 0     /* Raw representation */
+    // #define OBJ_ENCODING_INT 1     /* Encoded as integer */
+    // #define OBJ_ENCODING_HT 2      /* Encoded as hash table */
+    // #define OBJ_ENCODING_ZIPMAP 3  /* No longer used: old hash encoding. */
+    // #define OBJ_ENCODING_LINKEDLIST 4 /* No longer used: old list encoding. */
+    // #define OBJ_ENCODING_ZIPLIST 5 /* No longer used: old list/hash/zset encoding. */
+    // #define OBJ_ENCODING_INTSET 6  /* Encoded as intset */
+    // #define OBJ_ENCODING_SKIPLIST 7  /* Encoded as skiplist */
+    // #define OBJ_ENCODING_EMBSTR 8  /* Embedded sds string encoding */
+    // #define OBJ_ENCODING_QUICKLIST 9 /* Encoded as linked list of listpacks */
+    // #define OBJ_ENCODING_STREAM 10 /* Encoded as a radix tree of listpacks */
+    // #define OBJ_ENCODING_LISTPACK 11 /* Encoded as a listpack */
     unsigned encoding:4;
     // 24 位 LRU
     unsigned lru:LRU_BITS; /* LRU time (relative to global lru_clock) or
                             * LFU data (least significant 8 bits frequency
                             * and most significant 16 bits access time). */
-    // 饮用数量
+
+    // #define OBJ_SHARED_REFCOUNT INT_MAX     /* Global object never destroyed. */
+    // #define OBJ_STATIC_REFCOUNT (INT_MAX-1) /* Object allocated in the stack. */
+    // #define OBJ_FIRST_SPECIAL_REFCOUNT OBJ_STATIC_REFCOUNT
+    // 引用数量
     int refcount;
     // 数据指针
     void *ptr;
