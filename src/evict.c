@@ -727,6 +727,7 @@ int performEvictions(void) {
              * AOF and Output buffer memory will be freed eventually so
              * we only care about memory used by the key space. */
             // zmalloc是redis自己实现的内存分配，是对linux中malloc，free，relloc这3个函数的一个封装。
+            enterExecutionUnit(1, 0);
             delta = (long long) zmalloc_used_memory();
             latencyStartMonitor(eviction_latency);
             // 同步 异步两种方式
@@ -740,6 +741,7 @@ int performEvictions(void) {
             notifyKeyspaceEvent(NOTIFY_EVICTED, "evicted",
                 keyobj, db->id);
             propagateDeletion(db,keyobj,server.lazyfree_lazy_eviction);
+            exitExecutionUnit();
             postExecutionUnitOperations();
             decrRefCount(keyobj);
             keys_freed++;
