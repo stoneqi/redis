@@ -34,24 +34,32 @@
 /* Node, List, and Iterator are the only data structures used currently. */
 
 
-// 双向列表
+// 双向链表
 typedef struct listNode {
     struct listNode *prev;
     struct listNode *next;
     void *value;
 } listNode;
 
+// 遍历模式
 typedef struct listIter {
     listNode *next;
+    // 遍历方向
     int direction;
 } listIter;
 
+// 链表结构
 typedef struct list {
     listNode *head;
     listNode *tail;
+
+    // 节点拷贝函数， 拷贝整个链表时需要使用
     void *(*dup)(void *ptr);
+    // 释放节点内存函数
     void (*free)(void *ptr);
+    // 节点比较函数，链表查找函数，需要比较 ptr 和 key 是否相等，不一定是一个结构体
     int (*match)(void *ptr, void *key);
+    // 长度
     unsigned long len;
 } list;
 

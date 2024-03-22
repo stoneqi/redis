@@ -79,6 +79,8 @@ typedef struct dictType {
 } dictType;
 
 #define DICTHT_SIZE(exp) ((exp) == -1 ? 0 : (unsigned long)1<<(exp))
+
+// -1 用来取 mask，例如 10000-1， 01111.
 #define DICTHT_SIZE_MASK(exp) ((exp) == -1 ? 0 : (DICTHT_SIZE(exp))-1)
 
 struct dict {
@@ -87,18 +89,24 @@ struct dict {
 
     // 两个hash table，供 rehash 使用
     dictEntry **ht_table[2];
-    // 已使用的数据
+    // 每个字典中存在多少个 key
     unsigned long ht_used[2];
 
     // rehashidx的索引，从数组0到最大值 依次做rehash
     long rehashidx; /* rehashing not in progress if rehashidx == -1 */
 
     /* Keep small vars at end for optimal (minimal) struct padding */
+    // 适用 int 16 以优化 padding
     // 暂停rehash
     int16_t pauserehash; /* If >0 rehashing is paused (<0 indicates coding error) */
     
+    //  signed char取值范围是 -128 到 127(有符号位) unsigned char 取值范围是 0 到 255
+    // C标准中对char是 Impementation Defined，就是未明确定义
+    // （1）那它由什么定义？坦白说，具体的编译器明确定义，一般都是用signed char或unsigned char来实现char的，也就是说不同的编译器对char是什么定义不一样
+    // 当前字典大小的指数量级，扩容的时候操作这个, 使用 char 用以节约内存， 不用long long 存储
     signed char ht_size_exp[2]; /* exponent of size. (size = 1<<exp) */
 
+    // 根据 dictEntryBytes 申请对应字节， 用以特殊字典保存多余的信息。
     void *metadata[];           /* An arbitrary number of bytes (starting at a
                                  * pointer-aligned address) of size as defined
                                  * by dictType's dictEntryBytes. */
@@ -163,6 +171,7 @@ typedef struct {
 #define randomULong() random()
 #endif
 
+// 三种 resize 策略
 typedef enum {
     DICT_RESIZE_ENABLE,
     DICT_RESIZE_AVOID,
@@ -170,24 +179,33 @@ typedef enum {
 } dictResizeEnable;
 
 /* API */
+// 创建 dict
 dict *dictCreate(dictType *type);
 int dictExpand(dict *d, unsigned long size);
 int dictTryExpand(dict *d, unsigned long size);
 void *dictMetadata(dict *d);
+// 添加 dict
 int dictAdd(dict *d, void *key, void *val);
 dictEntry *dictAddRaw(dict *d, void *key, dictEntry **existing);
 void *dictFindPositionForInsert(dict *d, const void *key, dictEntry **existing);
 dictEntry *dictInsertAtPosition(dict *d, void *key, void *position);
+// 查找
 dictEntry *dictAddOrFind(dict *d, void *key);
+// 替换
 int dictReplace(dict *d, void *key, void *val);
+
+// 删除
 int dictDelete(dict *d, const void *key);
 dictEntry *dictUnlink(dict *d, const void *key);
 void dictFreeUnlinkedEntry(dict *d, dictEntry *he);
 dictEntry *dictTwoPhaseUnlinkFind(dict *d, const void *key, dictEntry ***plink, int *table_index);
 void dictTwoPhaseUnlinkFree(dict *d, dictEntry *he, dictEntry **plink, int table_index);
 void dictRelease(dict *d);
+//查找
 dictEntry * dictFind(dict *d, const void *key);
 void *dictFetchValue(dict *d, const void *key);
+
+// 设置大小
 int dictResize(dict *d);
 void dictSetKey(dict *d, dictEntry* de, void *key);
 void dictSetVal(dict *d, dictEntry *de, void *val);
@@ -221,6 +239,8 @@ uint64_t dictGenHashFunction(const void *key, size_t len);
 uint64_t dictGenCaseHashFunction(const unsigned char *buf, size_t len);
 void dictEmpty(dict *d, void(callback)(dict*));
 void dictSetResizeEnabled(dictResizeEnable enable);
+
+// Rehash
 int dictRehash(dict *d, int n);
 int dictRehashMilliseconds(dict *d, int ms);
 void dictSetHashFunctionSeed(uint8_t *seed);

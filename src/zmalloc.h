@@ -66,6 +66,7 @@
  *
  * NO_MALLOC_USABLE_SIZE disables it on all platforms, even if they are
  *      known to support it.
+ *  // malloc_usable_size Linux下获取malloc实际分配的内存大小
  * USE_MALLOC_USABLE_SIZE forces use of malloc_usable_size() regardless
  *      of platform.
  */
@@ -93,10 +94,13 @@
 #endif
 #endif
 
+// 定义通用的 zmalloc_size 实现， zmalloc_size在不同内存管理器里面调用不同实现
+
+
 /* We can enable the Redis defrag capabilities only if we are using Jemalloc
  * and the version used is our special version modified for Redis having
  * the ability to return per-allocation fragmentation hints. */
-// 自动内存碎片整理（Active Defrag）
+// 仅使用Jemalloc时且 Jemalloc 是修改过的特殊版本有能力返回每个分配碎片命中， 自动内存碎片整理（Active Defrag） 
 #if defined(USE_JEMALLOC) && defined(JEMALLOC_FRAG_HINT)
 #define HAVE_DEFRAG
 #endif
@@ -104,23 +108,50 @@
 /* 'noinline' attribute is intended to prevent the `-Wstringop-overread` warning
  * when using gcc-12 later with LTO enabled. It may be removed once the
  * bug[https://gcc.gnu.org/bugzilla/show_bug.cgi?id=96503] is fixed. */
+
+//
+// 开启LTO主要有这几点好处
+// （1）将一些函数內联化
+// （2）去除了一些无用代码
+// （3）对程序有全局的优化作用
+
  // 三种不同内存申请函数
+
+ // attribute((malloc)) 是由如此标记的函数返回的块不得包含任何指向其他对象的指针.目的是帮助编译器估计哪些指针可能指向同一个对象：该属性告诉GCC它不必担心你的函数返回的对象可能包含指向它正在跟踪的其他东西的指针.
+ // attribute((alloc_size))
+ // attribute((noinline)) function attribute与上面的相反，声明为非内联函数
+
+ // 分配需要的内存大小
 __attribute__((malloc,alloc_size(1),noinline)) void *zmalloc(size_t size);
+
+// 分配需要的内存并清 0
 __attribute__((malloc,alloc_size(1),noinline)) void *zcalloc(size_t size);
+
+
+// 根据 num 和 size 分配内存
 __attribute__((malloc,alloc_size(1,2),noinline)) void *zcalloc_num(size_t num, size_t size);
+
+// 在原指针的基础上重新分配内存并清 0， 如果内存充足，返回原地址，不充足，非新申请一块位置
 __attribute__((alloc_size(2),noinline)) void *zrealloc(void *ptr, size_t size);
+
+
+// 尝试分配内存，和上面区别是，分配失败返回空指针，不 crash
 __attribute__((malloc,alloc_size(1),noinline)) void *ztrymalloc(size_t size);
+
 __attribute__((malloc,alloc_size(1),noinline)) void *ztrycalloc(size_t size);
 __attribute__((alloc_size(2),noinline)) void *ztryrealloc(void *ptr, size_t size);
+
+// 释放内存
 void zfree(void *ptr);
 // The value returned by malloc_usable_size() may be greater than
-    //    the requested size of the allocation because of alignment and
-    //    minimum size constraints.  Although the excess bytes can be
-    //    overwritten by the application without ill effects, this is not
-    //    good programming practice: the number of excess bytes in an
-    //    allocation depends on the underlying implementation.
-//动态内存分配并返回可用内存大小 usable；
+//    the requested size of the allocation because of alignment and
+//    minimum size constraints.  Although the excess bytes can be
+//    overwritten by the application without ill effects, this is not
+//    good programming practice: the number of excess bytes in an
+//    allocation depends on the underlying implementation.
+//  动态内存分配并返回可用内存大小 usable； usable 通过 malloc_usable_size返回实际申请的内存大小
 // 由于内存对齐和最小内存限制，申请内存可能会大于需要的内存
+// 可以使用这部分超出实际需要大小的内存，且没有影响，但这不是一个好的实践，且超出的字节数取决了不同系统实现
 void *zmalloc_usable(size_t size, size_t *usable);
 void *zcalloc_usable(size_t size, size_t *usable);
 void *zrealloc_usable(void *ptr, size_t size, size_t *usable);
@@ -137,6 +168,7 @@ void zfree_usable(void *ptr, size_t *usable);
  * @return 返回新建字符串的地址
  */
 __attribute__((malloc)) char *zstrdup(const char *s);
+
 /**
  * @brief 返回已使用的内存
  * 
@@ -145,7 +177,10 @@ __attribute__((malloc)) char *zstrdup(const char *s);
  * @return 
  */
 size_t zmalloc_used_memory(void);
+
+// 设置 oom handler 处理
 void zmalloc_set_oom_handler(void (*oom_handler)(size_t));
+
 /**
  * @brief 获取实际使用的物理内存
  * 
@@ -154,6 +189,7 @@ void zmalloc_set_oom_handler(void (*oom_handler)(size_t));
  * @return 
  */
 size_t zmalloc_get_rss(void);
+
 int zmalloc_get_allocator_info(size_t *allocated, size_t *active, size_t *resident);
 void set_jemalloc_bg_thread(int enable);
 int jemalloc_purge(void);

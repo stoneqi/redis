@@ -57,9 +57,10 @@ void zlibc_free(void *ptr) {
 
 #define UNUSED(x) ((void)(x))
 
-#ifdef HAVE_MALLOC_SIZE
+#ifdef HAVE_MALLOC_SIZE  // 存在 MALLOC_SIZE，则不需要系统添加数据头大小
 #define PREFIX_SIZE (0)
 #else
+// 申请内存时多申请一个 size 大小的数据，用来保存申请的内存大小
 /* Use at least 8 bits alignment on all systems. */
 #if SIZE_MAX < 0xffffffffffffffffull
 #define PREFIX_SIZE 8
@@ -84,6 +85,7 @@ void zlibc_free(void *ptr) {
 
 // (3) realloc()
 // 给一个已经分配了地址的指针重新分配空间,参数ptr为原有的空间地址,newsize是重新申请的地址长度.
+
 #if defined(USE_TCMALLOC)
 #define malloc(size) tc_malloc(size)
 #define calloc(count,size) tc_calloc(count,size)
@@ -105,6 +107,7 @@ void zlibc_free(void *ptr) {
 // 已使用的内存
 static redisAtomic size_t used_memory = 0;
 
+// 默认申请失败，abort 退出程序
 static void zmalloc_default_oom(size_t size) {
     fprintf(stderr, "zmalloc: Out of memory trying to allocate %zu bytes\n",
         size);
@@ -123,23 +126,32 @@ void *extend_to_usable(void *ptr, size_t size) {
 
 /* Try allocating memory, and return NULL if failed.
  * '*usable' is set to the usable size if non NULL. */
+
+ // 其实，标准库中的 malloc 函数已经能够自动为分配的内存实现对齐，因此 zmalloc 方法在这里其主要目的是为了能够精确地计算每一次数据存储时所分配的内存大小。在每一次分配内存时，zmalloc 都会在该次分配的数据内存大小的基础上再加上一个 PREFIX_SIZE 大小的额外内存空间，这个 PREFIX_SIZE 宏代表了当前系统的最大内存寻址空间大小（size_t），其依赖于具体系统的类型不同而不同。这里我们可以简称这个 PREFIX_SIZE 大小的空间为一个存储单元的“数据头”部分。
+ // 如上图所示，通过 *((size_t*)ptr) = size; 语句，Redis 在当前分配内存块的前 PREFIX_SIZE 个字节，即数据头内存储了本次实际分配的数据块大小，而在后面 ”size“ 大小的内存空间中才真正存放了二进制的数据实体。在这里名为 update_zmalloc_stat_alloc 的函数在其内部会维护一个名为 used_memory 的全局变量，该变量累加了每次新分配的内存大小。函数在最后返回了一个偏移的指针，指向了当前分配内存的数据体部分。
 static inline void *ztrymalloc_usable_internal(size_t size, size_t *usable) {
     /* Possible overflow, return NULL, so that the caller can panic or handle a failed allocation. */
     // size_t 是一些C/C++标准在stddef.h中定义的，size_t 类型表示C中任何对象所能达到的最大长度，它是无符号整数。
     // SIZE_MAX 是 size_t 类型的最大值 
     if (size >= SIZE_MAX/2) return NULL;
+
+    // MALLOC_MIN_SIZE 最小为 long
     void *ptr = malloc(MALLOC_MIN_SIZE(size)+PREFIX_SIZE);
 
     if (!ptr) return NULL;
-#ifdef HAVE_MALLOC_SIZE
+#ifdef HAVE_MALLOC_SIZE  // 存在 MALLOC_SIZE 直接获取，并返回
     size = zmalloc_size(ptr);
+    // 统计申请到的内存
     update_zmalloc_stat_alloc(size);
     if (usable) *usable = size;
     return ptr;
 #else
+    // 第一个 size_t 位用以保存内存大小
     *((size_t*)ptr) = size;
+    // 统计申请到的内存
     update_zmalloc_stat_alloc(size+PREFIX_SIZE);
     if (usable) *usable = size;
+    // 指针后移到实际的数据位置
     return (char*)ptr+PREFIX_SIZE;
 #endif
 }
@@ -147,7 +159,8 @@ static inline void *ztrymalloc_usable_internal(size_t size, size_t *usable) {
 void *ztrymalloc_usable(size_t size, size_t *usable) {
     size_t usable_size = 0;
     void *ptr = ztrymalloc_usable_internal(size, &usable_size);
-#ifdef HAVE_MALLOC_SIZE
+// 如果有Malloc 则禁用
+#ifdef HAVE_MALLOC_SIZE 
     ptr = extend_to_usable(ptr, usable_size);
 #endif
     if (usable) *usable = usable_size;
@@ -281,6 +294,7 @@ static inline void *ztryrealloc_usable_internal(void *ptr, size_t size, size_t *
     size_t oldsize;
     void *newptr;
 
+    // 释放内存
     /* not allocating anything, just redirect to free. */
     if (size == 0 && ptr != NULL) {
         zfree(ptr);
@@ -288,10 +302,12 @@ static inline void *ztryrealloc_usable_internal(void *ptr, size_t size, size_t *
         return NULL;
     }
     /* Not freeing anything, just redirect to malloc. */
+    // 为空则直接申请新内存
     if (ptr == NULL)
         return ztrymalloc_usable(size, usable);
 
     /* Possible overflow, return NULL, so that the caller can panic or handle a failed allocation. */
+    // size 大于 最大的内存的两倍，直接返回错误， 理论上直接申请超过一半的内存可能失败
     if (size >= SIZE_MAX/2) {
         zfree(ptr);
         if (usable) *usable = 0;
@@ -312,8 +328,10 @@ static inline void *ztryrealloc_usable_internal(void *ptr, size_t size, size_t *
     if (usable) *usable = size;
     return newptr;
 #else
+    // 减去数据头
     realptr = (char*)ptr-PREFIX_SIZE;
     oldsize = *((size_t*)realptr);
+    // 重新申请
     newptr = realloc(realptr,size+PREFIX_SIZE);
     if (newptr == NULL) {
         if (usable) *usable = 0;
@@ -321,7 +339,9 @@ static inline void *ztryrealloc_usable_internal(void *ptr, size_t size, size_t *
     }
 
     *((size_t*)newptr) = size;
+    // 减去释放的内存
     update_zmalloc_stat_free(oldsize);
+    // 增加新申请的内存
     update_zmalloc_stat_alloc(size);
     if (usable) *usable = size;
     return (char*)newptr+PREFIX_SIZE;
@@ -440,6 +460,7 @@ void zmalloc_set_oom_handler(void (*oom_handler)(size_t)) {
 // madvise会向内核提供一个针对于于地址区间的I/O的建议，内核可能会采纳这个建议，会做一些预读的操作。例如MADV_SEQUENTIAL这个就表明顺序预读。
 
 // 如果感觉这样还不给力，可以采用read操作，从mmap文件的首地址开始到最终位置，顺序的读取一遍，这样可以完全保证mmap后的数据全部load到内存中。
+// 加载 redis 持久化的文件
 void zmadvise_dontneed(void *ptr) {
 #if defined(USE_JEMALLOC) && defined(__linux__)
     static size_t page_size = 0;

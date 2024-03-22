@@ -7,7 +7,7 @@
  *
  * Copyright (c) 2006-2012, Salvatore Sanfilippo <antirez at gmail dot com>
  * All rights reserved.
- *
+ *zmalloc.c
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *
@@ -76,6 +76,7 @@ struct dictEntry {
                                  * by dictType's dictEntryMetadataBytes(). */
 };
 
+// 无值的优化
 typedef struct {
     void *key;
     dictEntry *next;
@@ -121,13 +122,14 @@ uint64_t dictGenCaseHashFunction(const unsigned char *buf, size_t len) {
 /* The 3 least significant bits in a pointer to a dictEntry determines what the
  * pointer actually points to. If the least bit is set, it's a key. Otherwise,
  * the bit pattern of the least 3 significant bits mark the kind of entry. */
-
+//指针里面划出三位用作 dictEntry 类型区分， 如果最小值是 1，说明他是一个 key，否则，后 3 位表明当前 dictEntry的类型
 #define ENTRY_PTR_MASK     7 /* 111 */
 #define ENTRY_PTR_NORMAL   0 /* 000 */
 #define ENTRY_PTR_NO_VALUE 2 /* 010 */
 
 /* Returns 1 if the entry pointer is a pointer to a key, rather than to an
  * allocated entry. Returns 0 otherwise. */
+ //如果 entryIsKey 是一个 key
 static inline int entryIsKey(const dictEntry *de) {
     return (uintptr_t)(void *)de & 1;
 }
@@ -198,8 +200,10 @@ dict *dictCreate(dictType *type)
 
 /* Initialize the hash table */
 int _dictInit(dict *d, dictType *type)
-{
+{   
+    // 初始化两个表
     _dictReset(d, 0);
+    // 初始化两个表
     _dictReset(d, 1);
     d->type = type;
     d->rehashidx = -1;
@@ -213,8 +217,10 @@ int dictResize(dict *d)
 {
     unsigned long minimal;
 
+    // 不支持 resize 或者 在 rehash 阶段
     if (dict_can_resize != DICT_RESIZE_ENABLE || dictIsRehashing(d)) return DICT_ERR;
     minimal = d->ht_used[0];
+    // 设置字典的最小容量，如果字典已有 key 小于 4 个，则设置为 4
     if (minimal < DICT_HT_INITIAL_SIZE)
         minimal = DICT_HT_INITIAL_SIZE;
     return dictExpand(d, minimal);
@@ -229,23 +235,30 @@ int _dictExpand(dict *d, unsigned long size, int* malloc_failed)
 
     /* the size is invalid if it is smaller than the number of
      * elements already inside the hash table */
+    // 正在 rehash 或者 resize 小于已存的 key
     if (dictIsRehashing(d) || d->ht_used[0] > size)
         return DICT_ERR;
 
     /* the new hash table */
+    // 创建新的表
     dictEntry **new_ht_table;
     unsigned long new_ht_used;
+    // 计算新表要增长的指数
     signed char new_ht_size_exp = _dictNextExp(size);
 
     /* Detect overflows */
+    // 新的大小
     size_t newsize = 1ul<<new_ht_size_exp;
+    // 新大小还是小于 size 或者 溢出，说明超过了 size_t 的最大值
     if (newsize < size || newsize * sizeof(dictEntry*) < newsize)
         return DICT_ERR;
 
     /* Rehashing to the same table size is not useful. */
+    // 已经相同不需要扩展
     if (new_ht_size_exp == d->ht_size_exp[0]) return DICT_ERR;
 
     /* Allocate the new hash table and initialize all pointers to NULL */
+    // 尝试申请内存并初始化为空
     if (malloc_failed) {
         new_ht_table = ztrycalloc(newsize*sizeof(dictEntry*));
         *malloc_failed = new_ht_table == NULL;
@@ -258,6 +271,7 @@ int _dictExpand(dict *d, unsigned long size, int* malloc_failed)
 
     /* Is this the first initialization? If so it's not really a rehashing
      * we just set the first hash table so that it can accept keys. */
+     // 如果第一个为空，则直接写入
     if (d->ht_table[0] == NULL) {
         d->ht_size_exp[0] = new_ht_size_exp;
         d->ht_used[0] = new_ht_used;
@@ -298,7 +312,10 @@ int dictRehash(dict *d, int n) {
     int empty_visits = n*10; /* Max number of empty buckets to visit. */
     unsigned long s0 = DICTHT_SIZE(d->ht_size_exp[0]);
     unsigned long s1 = DICTHT_SIZE(d->ht_size_exp[1]);
+    // dict 不能 resize 和 不在 rehash 中， 直接返回
     if (dict_can_resize == DICT_RESIZE_FORBID || !dictIsRehashing(d)) return 0;
+
+    // 如果避免调整 size 且 超过强制调整 resize比例，则直接放回。
     if (dict_can_resize == DICT_RESIZE_AVOID && 
         ((s1 > s0 && s1 / s0 < dict_force_resize_ratio) ||
          (s1 < s0 && s0 / s1 < dict_force_resize_ratio)))
@@ -306,33 +323,53 @@ int dictRehash(dict *d, int n) {
         return 0;
     }
 
+    // ht_used 有对应的 key
     while(n-- && d->ht_used[0] != 0) {
         dictEntry *de, *nextde;
 
         /* Note that rehashidx can't overflow as we are sure there are more
          * elements because ht[0].used != 0 */
+         //  DICTHT_SIZE 字典大小 必须大于 rehashidx的索引
         assert(DICTHT_SIZE(d->ht_size_exp[0]) > (unsigned long)d->rehashidx);
+
+        // 如果当前 索引已经迁移则执行下一个迁移
         while(d->ht_table[0][d->rehashidx] == NULL) {
+            
             d->rehashidx++;
+            // 判断是否超过本次要迁移的量
             if (--empty_visits == 0) return 1;
         }
+        // 获得要迁移的值， de 为一个单链表
         de = d->ht_table[0][d->rehashidx];
         /* Move all the keys in this bucket from the old to the new hash HT */
         while(de) {
             uint64_t h;
 
+            // 获取下一个值
             nextde = dictGetNext(de);
+
+            // 获取 de 的 key
             void *key = dictGetKey(de);
             /* Get the index in the new hash table */
+            // 如果表 1 的 size 大于 表 0 的 size， 则进行 计算新 hash 索引
             if (d->ht_size_exp[1] > d->ht_size_exp[0]) {
                 h = dictHashKey(d, key) & DICTHT_SIZE_MASK(d->ht_size_exp[1]);
             } else {
                 /* We're shrinking the table. The tables sizes are powers of
                  * two, so we simply mask the bucket index in the larger table
                  * to get the bucket index in the smaller table. */
+                // 表做收缩，则直接用 rehashidx 的索引计算新索引。我们简单地屏蔽较大表中的bucket索引，以获得较小表中的bucket索引。
                 h = d->rehashidx & DICTHT_SIZE_MASK(d->ht_size_exp[1]);
             }
+
+            //1、无值表
+            //  1.1 如果只有一个 key，且新表索引位置为空，如果原始值是正常的 entry，则释放 entry，保留 key，如果原始 entry 也是一个 key，则直接复用
+            //  1.2 如果原始 entry 是一个 key，但是新表索引里可能有冲突，不止一个 key，所以创建一个无值 entry 用以保存数据
+            //  1.3 按正常的保存，采用头插法放到新链表索引
+            // 2.有值表，按正常头插法进行插入
+            // 如果是无值的 set 表
             if (d->type->no_value) {
+                //  key 只有一个 且 ht_table[1][h] 为 null。说明当前 索引没有值，可以直接把指针指向 key 值
                 if (d->type->keys_are_odd && !d->ht_table[1][h]) {
                     /* Destination bucket is empty and we can store the key
                      * directly without an allocated entry. Free the old entry
@@ -342,26 +379,37 @@ int dictRehash(dict *d, int n) {
                      * this optimization for these dicts too. We can set the LSB
                      * bit when stored as a dict entry and clear it again when
                      * we need the key back. */
+                     // keys_are_even 优化， key 和 value 可以存两个指针。
+                    // 如果 entry 不是 key，说明和 d 的 type 冲突，直接 crash
                     assert(entryIsKey(key));
+                    // 如果不是 key，则释放当前 de 的内容， 保留 key 值
                     if (!entryIsKey(de)) zfree(decodeMaskedPtr(de));
+                    //de 直接设置为 key
                     de = key;
                 } else if (entryIsKey(de)) {
+                    // 不存在释放de 内存的问题，de 本身是一个指针指向的是 和 key 是同一个值
+                    // 需要把 de 仅 key 放到一个新的 hash 链表中
                     /* We don't have an allocated entry but we need one. */
+                    // 创建一个无值的 de，节省内存
                     de = createEntryNoValue(key, d->ht_table[1][h]);
                 } else {
                     /* Just move the existing entry to the destination table and
                      * update the 'next' field. */
                     assert(entryIsNoValue(de));
+                    // 否则，把新表的数据放在 de 后面，减少耗时。采用头插法
                     dictSetNext(de, d->ht_table[1][h]);
                 }
             } else {
                 dictSetNext(de, d->ht_table[1][h]);
             }
+            // 赋值
             d->ht_table[1][h] = de;
             d->ht_used[0]--;
             d->ht_used[1]++;
+            // 处理下一个
             de = nextde;
         }
+        // 原来的数据置为空
         d->ht_table[0][d->rehashidx] = NULL;
         d->rehashidx++;
     }
@@ -413,6 +461,7 @@ int dictRehashMilliseconds(dict *d, int ms) {
  * This function is called by common lookup or update operations in the
  * dictionary so that the hash table automatically migrates from H1 to H2
  * while it is actively used. */
+ // 当用户查找或更新的时候，会自动调用 一步 rehash 进行执行
 static void _dictRehashStep(dict *d) {
     if (d->pauserehash == 0) dictRehash(d,1);
 }
@@ -1441,33 +1490,46 @@ static signed char _dictNextExp(unsigned long size)
  * be inserted using dictInsertAtPosition if the key does not already exist in
  * the dict. If the key exists in the dict, NULL is returned and the optional
  * 'existing' entry pointer is populated, if provided. */
+ // 如果 key 已经存在，返回 null， existing 可选，用户可直接修改这里面的值
 void *dictFindPositionForInsert(dict *d, const void *key, dictEntry **existing) {
     unsigned long idx, table;
     dictEntry *he;
+    // 计算 hash
     uint64_t hash = dictHashKey(d, key);
     if (existing) *existing = NULL;
+    // 判断 rehash中，则执行一次，每次查找前执行 rehash，实现渐进式 hash
     if (dictIsRehashing(d)) _dictRehashStep(d);
 
     /* Expand the hash table if needed */
+    // 判断是否需要Expand
     if (_dictExpandIfNeeded(d) == DICT_ERR)
         return NULL;
+    // 
     for (table = 0; table <= 1; table++) {
+        // 计算实际索引，不用取余， 用二进制操作计算索引。
         idx = hash & DICTHT_SIZE_MASK(d->ht_size_exp[table]);
         /* Search if this slot does not already contain the given key */
+        // 搜索这个索引值
         he = d->ht_table[table][idx];
         while(he) {
+            // 获取 key
             void *he_key = dictGetKey(he);
+            // 比较 key 和 val 比较
             if (key == he_key || dictCompareKeys(d, key, he_key)) {
+                // 是该 key 值则直接返回这个位置的信息
                 if (existing) *existing = he;
                 return NULL;
             }
+            // 字典采取链表法，获取下一个链表
             he = dictGetNext(he);
         }
+        // 不在 rehash中， 则不需要在第二个表中去查找
         if (!dictIsRehashing(d)) break;
     }
 
     /* If we are in the process of rehashing the hash table, the bucket is
      * always returned in the context of the second (new) hash table. */
+    // 如果处于 rehash， 则返回第二张表格的索引位置做插入准备
     dictEntry **bucket = &d->ht_table[dictIsRehashing(d) ? 1 : 0][idx];
     return bucket;
 }

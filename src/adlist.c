@@ -55,6 +55,7 @@ list *listCreate(void)
 }
 
 /* Remove all the elements from the list without destroying the list itself. */
+// 清空 list
 void listEmpty(list *list)
 {
     unsigned long len;
@@ -75,6 +76,7 @@ void listEmpty(list *list)
 /* Free the whole list.
  *
  * This function can't fail. */
+ // 清空并释放自身
 void listRelease(list *list)
 {
     listEmpty(list);
@@ -327,6 +329,7 @@ listNode *listSearchKey(list *list, void *key)
     listRewind(list, &iter);
     while((node = listNext(&iter)) != NULL) {
         if (list->match) {
+            // 比较值和 key 的差异
             if (list->match(node->value, key)) {
                 return node;
             }
